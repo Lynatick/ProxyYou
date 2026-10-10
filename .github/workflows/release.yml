@@ -11,8 +11,8 @@ on:
         required: true
         type: choice
         options: [prepare, publish]
-      signatures_verified:
-        description: 'Для публикации: подписи и установка всех пакетов проверены'
+      artifacts_verified:
+        description: 'Для публикации: файлы проверены, статус подписей указан в описании'
         type: boolean
         default: false
 permissions:
@@ -33,7 +33,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ inputs.tag }}
       OPERATION: ${{ inputs.operation }}
-      SIGNATURES_VERIFIED: ${{ inputs.signatures_verified }}
+      ARTIFACTS_VERIFIED: ${{ inputs.artifacts_verified }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

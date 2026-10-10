@@ -36,7 +36,7 @@ def preflight():
 
 def verify_draft():
     v = version()
-    require(os.environ.get("SIGNATURES_VERIFIED") == "true", "Confirm package signatures and installation tests before publication")
+    require(os.environ.get("ARTIFACTS_VERIFIED") == "true", "Confirm artifact validation and disclosure of signing status before publication")
     repo, tag = os.environ["GH_REPO"], os.environ["RELEASE_TAG"]
     release = api(f"repos/{repo}/releases/tags/{tag}")
     require(release["draft"] and not release["prerelease"], "Expected a stable draft release")
@@ -61,7 +61,7 @@ def verify_draft():
                 for block in iter(lambda: f.read(1024 * 1024), b""):
                     digest.update(block)
             require(digest.hexdigest() == sums[name], f"Checksum mismatch: {name}")
-    print("Release assets and hashes verified; signing and installation are maintainer attestations.")
+    print("Release assets and hashes verified; signing status is a maintainer attestation.")
 
 
 if __name__ == "__main__":

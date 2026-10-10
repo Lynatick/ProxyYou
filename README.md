@@ -1,15 +1,18 @@
-# ProxyYou
+# PROXYYOU
 
 Клиент прокси для macOS Apple Silicon, Android / Android TV и Windows x64 на основе Flutter и Hiddify.
 
-- [Релизы и загрузки](https://github.com/Lynatick/ProxyYou/releases)
+- [Страница загрузки](https://lynatick.github.io/proxyyou/)
+- [Релизы и загрузки](https://github.com/Lynatick/proxyyou/releases)
 - [Порядок выпуска](docs/RELEASES.md)
 - [План обновлений через GitHub](docs/GITHUB_UPDATES.md)
-- [Сообщить об ошибке](https://github.com/Lynatick/ProxyYou/issues)
+- [Сообщить об ошибке](https://github.com/Lynatick/proxyyou/issues)
 
 Встроенное скачивание и установка обновлений ещё не реализованы. Проверки исходников запускаются автоматически; создание и публикация релизов выполняются вручную запускаемым workflow Release ProxyYou после проверки модифицированного ядра и подписей.
 
 Исходники распространяются по [Hiddify Extended GPL v3](LICENSE.md). Этот репозиторий — форк [Hiddify](https://github.com/hiddify/hiddify-app); дополнительные условия исходной лицензии сохранены.
+
+ProxyYou 4.1.18: единый значок P вместо Hi на всех платформах, в интерфейсе, трее, уведомлениях и Android TV; страница загрузки GitHub Pages.
 
 ProxyYou 4.1.17: убрана подсказка над конфигурацией на Android TV. Windows сохраняет службу подключения при смене фокуса; обработчик потери активности больше не возвращает фокус окну приложения. Для Windows выпускается один EXE-установщик.
 

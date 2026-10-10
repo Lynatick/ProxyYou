@@ -36,3 +36,5 @@ jobs:
         run: flutter test --concurrency=1
       - name: Video playback proof tests
         run: node --test test/playback/proof.test.cjs
+      - name: Download page tests
+        run: node --test test/site/downloads.test.mjs
