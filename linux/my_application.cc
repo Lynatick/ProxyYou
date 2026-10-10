@@ -14,7 +14,6 @@ struct _MyApplication
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
-#define ICON_PATH "./data/flutter_assets/assets/images/source/ic_launcher_border.png"
 
 // Implements GApplication::activate.
 static void my_application_activate(GApplication *application)
@@ -30,7 +29,14 @@ static void my_application_activate(GApplication *application)
 
   GtkWindow *window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
-  gtk_window_set_icon_from_file(window, ICON_PATH, NULL);
+  gchar *executable = g_file_read_link("/proc/self/exe", NULL);
+  gchar *directory = executable ? g_path_get_dirname(executable) : g_get_current_dir();
+  gchar *icon_path = g_build_filename(directory, "data", "flutter_assets", "assets",
+                                     "images", "source", "ic_launcher_border.png", NULL);
+  gtk_window_set_icon_from_file(window, icon_path, NULL);
+  g_free(icon_path);
+  g_free(directory);
+  g_free(executable);
 
   // Use a header bar when running in GNOME as this is the common style used
   // by applications and is the setup most users will be using (e.g. Ubuntu

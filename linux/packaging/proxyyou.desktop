@@ -2,7 +2,7 @@
 Type=Application
 Name=PROXYYOU
 Comment=Прокси-клиент
-Exec=proxyyou
+Exec=hiddify
 Icon=proxyyou
 Terminal=false
 Categories=Network;
