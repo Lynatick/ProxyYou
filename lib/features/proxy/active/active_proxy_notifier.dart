@@ -19,6 +19,16 @@ import 'package:rxdart/rxdart.dart';
 
 part 'active_proxy_notifier.g.dart';
 
+// mainOutboundsInfo returns the selected route from group to actual server.
+// Use the leaf's delay rather than a selector/balancer's cached aggregate delay.
+OutboundInfo connectedOutbound(List<OutboundGroup> groups) {
+  for (final group in groups.reversed) {
+    final server = group.items.where((item) => !item.isGroup).firstOrNull;
+    if (server != null) return server;
+  }
+  return groups.firstOrNull?.items.firstOrNull ?? OutboundInfo();
+}
+
 @riverpod
 class IpInfoNotifier extends _$IpInfoNotifier with AppLogger {
   @override
@@ -87,7 +97,7 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
     return _proxyRepo
         .watchActiveProxies()
         .map((event) => event.getOrElse((l) => List<OutboundGroup>.empty()))
-        .map((event) => event.firstOrNull?.items.first ?? OutboundInfo())
+        .map(connectedOutbound)
         .doOnData((info) => _handleConnectionHaptic(info.urlTestDelay));
   }
 

@@ -25,7 +25,7 @@ enum ServiceMode {
     if (Platform.isWindows || Platform.isLinux) {
       return values;
     } else if (Platform.isMacOS) {
-      return [proxy, systemProxy, tun];
+      return [proxy, systemProxy];
     }
     // mobile
     return [proxy, tun];

@@ -22,7 +22,6 @@ class GeneralPage extends HookConsumerWidget {
       appBar: AppBar(title: Text(t.pages.settings.general.title)),
       body: ListView(
         children: [
-          const LocalePrefTile(),
           const ThemeModePrefTile(),
           const EnableAnalyticsPrefTile(),
           SwitchListTile.adaptive(
@@ -73,11 +72,10 @@ class GeneralPage extends HookConsumerWidget {
           // Debug mode and log level moved to the Logs page. Both decide how
           // much is recorded, which is only meaningful next to the logs
           // themselves — and next to the filters that decide what is shown.
-          ValuePreferenceWidget(
-            value: ref.watch(ConfigOptions.connectionTestUrl),
-            preferences: ref.watch(ConfigOptions.connectionTestUrl.notifier),
-            title: t.pages.settings.general.connectionTestUrl,
-            icon: Icons.link_rounded,
+          const ListTile(
+            title: Text('Адрес проверки подключения'),
+            subtitle: Text('https://www.youtube.com/generate_204'),
+            leading: Icon(Icons.link_rounded),
           ),
           ListTile(
             title: Text(t.pages.settings.general.urlTestInterval),

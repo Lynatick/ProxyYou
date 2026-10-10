@@ -39,7 +39,7 @@ class AboutPage extends HookConsumerWidget {
     });
 
     final conditionalTiles = [
-      if (appInfo.release.allowCustomUpdateChecker)
+      if (Constants.allowAppUpdates && appInfo.release.allowCustomUpdateChecker)
         ListTile(
           title: Text(t.pages.about.checkForUpdate),
           trailing: switch (appUpdate) {

@@ -15,7 +15,7 @@ class WindowsProtocolHandler extends ProtocolHandler {
     final prefix = _regPrefix(scheme);
     final capitalized = scheme[0].toUpperCase() + scheme.substring(1);
     final args = getArguments(arguments).map((a) => _sanitize(a));
-    final cmd = '${executable ?? Platform.resolvedExecutable} ${args.join(' ')}';
+    final cmd = '${_sanitize(executable ?? Platform.resolvedExecutable)} ${args.join(' ')}';
 
     _regCreateStringKey(_hive, prefix, '', 'URL:$capitalized');
     _regCreateStringKey(_hive, prefix, 'URL Protocol', '');

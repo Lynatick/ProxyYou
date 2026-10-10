@@ -1,16 +1,16 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:dartx/dartx.dart';
-
 import 'package:hiddify/core/haptic/haptic_service.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/preferences/preferences_provider.dart';
+import 'package:hiddify/core/utils/latest_async_map.dart';
 import 'package:hiddify/core/utils/preferences_utils.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
 import 'package:hiddify/features/proxy/model/proxy_failure.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
-
 import 'package:hiddify/utils/riverpod_utils.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -64,156 +64,35 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       return Stream.error(const ServiceNotRunning());
     }
     final sortBy = ref.watch(proxiesSortNotifierProvider);
-    // yield* ref
-    //     .watch(proxyRepositoryProvider)
-    //     .watchProxies()
-    //     .throttleTime(
-    //       const Duration(milliseconds: 100),
-    //       leading: false,
-    //       trailing: true,
-    //     )
-    //     .map(
-    //       (event) => event.getOrElse(
-    //         (err) {
-    //           loggy.warning("error receiving proxies", err);
-    //           throw err;
-    //         },
-    //       ),
-    //     )
-    //     .asyncMap((proxies) async => _sortOutbounds(proxies, sortBy));
-    return ref
-        .watch(proxyRepositoryProvider)
-        .watchProxies()
-        .map(
-          (event) => event.getOrElse((err) {
-            loggy.warning("error receiving proxies", err);
-            throw err;
-          }),
-        )
-        .asyncMap((proxies) async => await _sortOutbounds(proxies, sortBy));
+    return latestAsyncMap(
+      ref.watch(proxyRepositoryProvider).watchProxies().map((event) => event.getOrElse((err) => throw err)),
+      (group) => sortOutboundGroup(group, sortBy),
+      interval: const Duration(milliseconds: 250),
+    );
   }
-
-  // Future<List<OutboundGroup>> _sortOutbounds(
-  //   List<OutboundGroup> proxies,
-  //   ProxiesSort sortBy,
-  // ) async {
-  //   final groupWithSelected = {
-  //     for (final o in proxies) o.tag: o.selected,
-  //   };
-  //   final sortedProxies = <OutboundGroup>[];
-  //   for (final group in proxies) {
-  //     final sortedItems = switch (sortBy) {
-  //       ProxiesSort.name => group.items.sortedWith((a, b) {
-  //           if (a.isGroup && !b.isGroup) return -1;
-  //           if (!a.isGroup && b.isGroup) return 1;
-  //           return a.tag.compareTo(b.tag);
-  //         }),
-  //       ProxiesSort.delay => group.items.sortedWith((a, b) {
-  //           if (a.isGroup && !b.isGroup) return -1;
-  //           if (!a.isGroup && b.isGroup) return 1;
-
-  //           final ai = a.urlTestDelay;
-  //           final bi = b.urlTestDelay;
-  //           if (ai == 0 && bi == 0) return -1;
-  //           if (ai == 0 && bi > 0) return 1;
-  //           if (ai > 0 && bi == 0) return -1;
-  //           return ai.compareTo(bi);
-  //         }),
-  //       ProxiesSort.unsorted => group.items,
-  //     };
-  //     final items = <OutboundInfo>[];
-  //     for (final item in sortedItems) {
-  //       // if (groupWithSelected.keys.contains(item.tag)) {
-  //       //   items.add(item.copyWith(selectedTag: groupWithSelected[item.tag]));
-  //       // } else {
-  //       items.add(item);
-  //       // }
-  //     }
-  //     group.items.clear();
-  //     group.items.addAll(items);
-  //     sortedProxies.add(group);
-  //   }
-  //   return sortedProxies;
-  // }
-
-  Future<OutboundGroup?> _sortOutbounds(OutboundGroup? proxies, ProxiesSort sortBy) async {
-    if (proxies == null) return null;
-
-    final sortedItems = switch (sortBy) {
-      ProxiesSort.name => proxies.items.sortedWith((a, b) {
-        if (a.isGroup && !b.isGroup) return -1;
-        if (!a.isGroup && b.isGroup) return 1;
-        return a.tag.compareTo(b.tag);
-      }),
-      ProxiesSort.delay => proxies.items.sortedWith((a, b) {
-        if (a.isGroup && !b.isGroup) return -1;
-        if (!a.isGroup && b.isGroup) return 1;
-
-        final ai = a.urlTestDelay;
-        final bi = b.urlTestDelay;
-        if (ai == 0 && bi == 0) return -1;
-        if (ai == 0 && bi > 0) return 1;
-        if (ai > 0 && bi == 0) return -1;
-        return ai.compareTo(bi);
-      }),
-      ProxiesSort.unsorted => proxies.items,
-      ProxiesSort.usage => proxies.items.sortedWith((a, b) {
-        if (a.isGroup && !b.isGroup) return -1;
-        if (!a.isGroup && b.isGroup) return 1;
-        return (b.upload + b.download).compareTo(a.upload + a.download);
-      }),
-    };
-    final items = <OutboundInfo>[];
-    for (final item in sortedItems) {
-      // if (groupWithSelected.keys.contains(item.tag)) {
-      //   items.add(item.copyWith(selectedTag: groupWithSelected[item.tag]));
-      // } else {
-      items.add(item);
-      // }
-    }
-    proxies.items.clear();
-    proxies.items.addAll(items);
-    return proxies;
-  }
-
-  // Future<void> changeProxy(String groupTag, String outboundTag) async {
-  //   loggy.debug(
-  //     "changing proxy, group: [$groupTag] - outbound: [$outboundTag]",
-  //   );
-  //   if (state case AsyncData(value: final outbounds)) {
-  //     await ref.read(hapticServiceProvider.notifier).lightImpact();
-  //     await ref.read(proxyRepositoryProvider).selectProxy(groupTag, outboundTag).getOrElse((err) {
-  //       loggy.warning("error selecting outbound", err);
-  //       throw err;
-  //     }).run();
-  //     final outboundg = outbounds.where((e) => e.tag == groupTag).firstOrNull;
-  //     if (outboundg != null) {
-  //       final newselected = outboundg.items.where((e) => e.tag == outboundTag).firstOrNull;
-  //       if (newselected != null) {
-  //         newselected.isSelected = true;
-  //         outboundg.selected = newselected;
-  //       }
-  //     }
-  //     state = AsyncData(
-  //       [...outbounds],
-  //     ).copyWithPrevious(state);
-  //   }
-  // }
 
   Future<void> changeProxy(String groupTag, String outboundTag) async {
     loggy.debug("changing proxy, group: [$groupTag] - outbound: [$outboundTag]");
     if (!state.hasValue) return;
-    final outbounds = state.value!;
     await ref.read(hapticServiceProvider.notifier).lightImpact();
     await ref.read(proxyRepositoryProvider).selectProxy(groupTag, outboundTag).getOrElse((err) {
       loggy.warning("error selecting outbound", err);
       throw err;
     }).run();
+    final outbounds = state.valueOrNull;
+    if (outbounds == null || outbounds.tag != groupTag) return;
     final newselected = outbounds.items.where((e) => e.tag == outboundTag).firstOrNull;
     if (newselected != null) {
-      newselected.isSelected = true;
-      outbounds.selected = newselected.tag;
-      state = AsyncValue.data(outbounds);
+      state = AsyncValue.data(
+        OutboundGroup(
+          tag: outbounds.tag,
+          type: outbounds.type,
+          selected: newselected.tag,
+          selectable: outbounds.selectable,
+          isExpand: outbounds.isExpand,
+          items: outbounds.items,
+        ),
+      );
     }
   }
 
@@ -227,4 +106,32 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       }).run();
     }
   }
+}
+
+// Pure arguments avoid capturing the notifier, Ref, or native handles.
+Future<OutboundGroup?> sortOutboundGroup(OutboundGroup? group, ProxiesSort mode) async {
+  if (group == null || mode == ProxiesSort.unsorted) return group;
+  return Isolate.run(() {
+    final items = group.items.toList();
+    items.sort((a, b) {
+      if (a.isGroup != b.isGroup) return a.isGroup ? -1 : 1;
+      final order = switch (mode) {
+        ProxiesSort.name => a.tag.compareTo(b.tag),
+        ProxiesSort.delay => (a.urlTestDelay == 0 ? 0x7fffffff : a.urlTestDelay).compareTo(
+          b.urlTestDelay == 0 ? 0x7fffffff : b.urlTestDelay,
+        ),
+        ProxiesSort.usage => (b.upload + b.download).compareTo(a.upload + a.download),
+        ProxiesSort.unsorted => 0,
+      };
+      return order != 0 ? order : a.tag.compareTo(b.tag);
+    });
+    return OutboundGroup(
+      tag: group.tag,
+      type: group.type,
+      selected: group.selected,
+      selectable: group.selectable,
+      isExpand: group.isExpand,
+      items: items,
+    );
+  });
 }

@@ -8,7 +8,7 @@ import 'package:hiddify/core/model/directories.dart';
 import 'package:hiddify/core/utils/laststeam.dart';
 import 'package:hiddify/hiddifycore/core_interface/core_interface.dart';
 import 'package:hiddify/hiddifycore/core_interface/mtls_channel_cred.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore_service.pbgrpc.dart';
+import 'package:hiddify/hiddifycore/core_interface/responsive_core_client.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hello/hello.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hello/hello_service.pbgrpc.dart';
 import 'package:hiddify/singbox/model/core_status.dart';
@@ -78,7 +78,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
     // var chanelOption = ChannelOptions(
     //   credentials: MTLSChannelCredentials(serverPublicKey: serverPublicKey, clientPrivateKey: cert.privateKey as ECPrivateKey),
     // );
-    fgClient = CoreClient(
+    fgClient = ResponsiveCoreClient(
       ClientChannel(
         '127.0.0.1',
         port: portFront,
@@ -86,7 +86,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
       ),
     );
 
-    bgClient = CoreClient(
+    bgClient = ResponsiveCoreClient(
       ClientChannel(
         '127.0.0.1',
         port: portBack,
@@ -117,7 +117,7 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
         final res = await _status.get(timeout: const Duration(seconds: 1));
 
         switch (res) {
-          case CoreStarted() || CoreHotReloading():
+          case CoreStarted():
             break;
           case CoreStopped():
             if (res.alert != null) {

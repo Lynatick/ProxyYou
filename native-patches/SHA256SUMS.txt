@@ -1,0 +1,2 @@
+c5e837a9d224486d9c742cbb0f81a1f15d5ec3dbb1ec302f8e0ec9340da239b9  hiddify-core/bin/hiddify-core.dylib
+4ae9602dbdf0fd877b958f25c7c400f8f01fb54c7f3ab36c82dc1404719e46d8  android/app/libs/hiddify-core.aar

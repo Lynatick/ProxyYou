@@ -1,6 +1,6 @@
 {
   "common": {
-    "appTitle": "Hiddify",
+    "appTitle": "ProxyYou",
     "start": "Start",
     "version": "Version",
     "ok": "OK",
@@ -725,7 +725,6 @@
     "tapToConnect": "Tap to connect",
     "connect": "Connect",
     "connecting": "Connecting…",
-    "hotReloading": "Hot reloading…",
     "connected": "Connected",
     "disconnect": "Disconnect",
     "disconnecting": "Disconnecting…",

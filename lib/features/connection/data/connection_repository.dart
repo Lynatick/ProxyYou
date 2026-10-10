@@ -3,6 +3,7 @@ import 'package:hiddify/core/model/directories.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/utils/exception_handler.dart';
+import 'package:hiddify/features/app_based_routing/model/per_app_proxy_mode.dart';
 import 'package:hiddify/features/connection/model/connection_failure.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/profile/data/profile_path_resolver.dart';
@@ -10,6 +11,7 @@ import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/hiddifycore/hiddify_core_service.dart';
 import 'package:hiddify/singbox/model/core_status.dart';
+import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hiddify/singbox/model/singbox_config_option.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -20,10 +22,6 @@ abstract interface class ConnectionRepository {
 
   TaskEither<ConnectionFailure, Unit> setup();
   Stream<ConnectionStatus> watchConnectionStatus();
-
-  /// Whether the core is applying a new config without a restart; the connection stays up
-  /// (watchConnectionStatus keeps reporting it as connected).
-  Stream<bool> watchHotReloading();
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit);
   TaskEither<ConnectionFailure, Unit> disconnect();
   TaskEither<ConnectionFailure, Unit> reconnect(ProfileEntity activeProfile, bool disableMemoryLimit);
@@ -77,13 +75,9 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
         CoreStarting() => const Connecting(),
         CoreStarted() => const Connected(),
         CoreStopping() => const Disconnecting(),
-        CoreHotReloading() => const Connected(),
       },
     );
   }
-
-  @override
-  Stream<bool> watchHotReloading() => singbox.watchStatus().map((event) => event is CoreHotReloading).distinct();
 
   @override
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity activeProfile, bool disableMemoryLimit) => setup().flatMap(
@@ -99,48 +93,59 @@ class ConnectionRepositoryImpl with ExceptionHandler, InfraLogger implements Con
   @override
   TaskEither<ConnectionFailure, Unit> reconnect(ProfileEntity activeProfile, bool disableMemoryLimit) =>
       applyConfigOption(activeProfile).flatMap(
-        // hot reload when possible, restart otherwise
         (_) => singbox
-            .reload(profilePathResolver.file(activeProfile.id).path, activeProfile.name, disableMemoryLimit)
+            .restart(profilePathResolver.file(activeProfile.id).path, activeProfile.name, disableMemoryLimit)
             .mapLeft(UnexpectedConnectionFailure.new),
       );
 
   @visibleForTesting
-  TaskEither<ConnectionFailure, Unit> applyConfigOption(ProfileEntity prof) =>
-      TaskEither.fromEither(configOptionRepository.fullOptionsOverrided(prof.profileOverride()))
-          .mapLeft((l) => ConnectionFailure.invalidConfigOption(null, l))
-          .flatMap(
-            (overridedOptions) => TaskEither.tryCatch(() async {
-              if (!overridedOptions.chainStatus.isOff()) {
-                final isWarpLicenseAgreed = ref.read(Preferences.warpConsentGiven) == true;
-                final isWarpEnabled =
-                    overridedOptions.unblocker.mode.isWarp() || overridedOptions.extraSecurity.mode.isWarp();
-                if (!isWarpLicenseAgreed && isWarpEnabled) {
-                  final isAgreed = await ref.read(dialogNotifierProvider.notifier).showWarpLicense();
-                  if (isAgreed == true) {
-                    await ref.read(Preferences.warpConsentGiven.notifier).update(true);
-                    // return (await applyConfigOption(prof).run()).match((l) => throw l, (_) => unit);
-                  } else {
-                    throw const MissingWarpLicense();
-                  }
-                }
-
-                final isPsiphonLicenseAgreed = ref.read(Preferences.psiphonConsentGiven) == true;
-                final isPsiphonEnabled =
-                    overridedOptions.unblocker.mode.isPsiphon() || overridedOptions.extraSecurity.mode.isPsiphon();
-                if (!isPsiphonLicenseAgreed && isPsiphonEnabled) {
-                  final isAgreed = await ref.read(dialogNotifierProvider.notifier).showPsiphonLicense();
-                  if (isAgreed == true) {
-                    await ref.read(Preferences.psiphonConsentGiven.notifier).update(true);
-                  } else {
-                    throw const MissingPsiphonLicense();
-                  }
+  TaskEither<ConnectionFailure, Unit> applyConfigOption(ProfileEntity prof) {
+    if (PlatformUtils.isAndroid && ref.read(Preferences.perAppProxyEnabled)) {
+      if (ref.read(ConfigOptions.serviceMode) != ServiceMode.tun) {
+        return TaskEither.left(const ConnectionFailure.unexpected('Выбор программ работает в режиме VPN.'));
+      }
+      if (ref.read(Preferences.perAppProxyMode) == AppProxyMode.include &&
+          ref.read(Preferences.includeApps).where((app) => app.trim().isNotEmpty).isEmpty) {
+        return TaskEither.left(
+          const ConnectionFailure.unexpected('Выберите хотя бы одну программу для проксирования.'),
+        );
+      }
+    }
+    return TaskEither.fromEither(configOptionRepository.fullOptionsOverrided(prof.profileOverride()))
+        .mapLeft((l) => ConnectionFailure.invalidConfigOption(null, l))
+        .flatMap(
+          (overridedOptions) => TaskEither.tryCatch(() async {
+            if (!overridedOptions.chainStatus.isOff()) {
+              final isWarpLicenseAgreed = ref.read(Preferences.warpConsentGiven) == true;
+              final isWarpEnabled =
+                  overridedOptions.unblocker.mode.isWarp() || overridedOptions.extraSecurity.mode.isWarp();
+              if (!isWarpLicenseAgreed && isWarpEnabled) {
+                final isAgreed = await ref.read(dialogNotifierProvider.notifier).showWarpLicense();
+                if (isAgreed == true) {
+                  await ref.read(Preferences.warpConsentGiven.notifier).update(true);
+                  // return (await applyConfigOption(prof).run()).match((l) => throw l, (_) => unit);
+                } else {
+                  throw const MissingWarpLicense();
                 }
               }
 
-              _configOptionsSnapshot = overridedOptions;
-              await singbox.changeOptions(overridedOptions).run();
-              return unit;
-            }, (err, st) => err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st)),
-          );
+              final isPsiphonLicenseAgreed = ref.read(Preferences.psiphonConsentGiven) == true;
+              final isPsiphonEnabled =
+                  overridedOptions.unblocker.mode.isPsiphon() || overridedOptions.extraSecurity.mode.isPsiphon();
+              if (!isPsiphonLicenseAgreed && isPsiphonEnabled) {
+                final isAgreed = await ref.read(dialogNotifierProvider.notifier).showPsiphonLicense();
+                if (isAgreed == true) {
+                  await ref.read(Preferences.psiphonConsentGiven.notifier).update(true);
+                } else {
+                  throw const MissingPsiphonLicense();
+                }
+              }
+            }
+
+            _configOptionsSnapshot = overridedOptions;
+            await singbox.changeOptions(overridedOptions).run();
+            return unit;
+          }, (err, st) => err is ConnectionFailure ? err : ConnectionFailure.unexpected(err, st)),
+        );
+  }
 }

@@ -22,7 +22,7 @@ class Db extends _$Db with InfraLogger {
   static QueryExecutor _openConnection() {
     return LazyDatabase(
       () => driftDatabase(
-        name: "db",
+        name: "proxyyou_db",
         native: const DriftNativeOptions(databaseDirectory: AppDirectories.getDatabaseDirectory),
         web: DriftWebOptions(sqlite3Wasm: Uri.parse('sqlite3.wasm'), driftWorker: Uri.parse('drift_worker.js')),
       ),
@@ -66,10 +66,7 @@ class Db extends _$Db with InfraLogger {
           await m.createTable(schema.appProxyEntries);
         },
         from5To6: (m, schema) async {
-          final profileOverrideExists = await _columnExists(
-            schema.profileEntries.actualTableName,
-            'profile_override',
-          );
+          final profileOverrideExists = await _columnExists(schema.profileEntries.actualTableName, 'profile_override');
           if (profileOverrideExists) {
             await m.dropColumn(schema.profileEntries, 'profile_override');
           }

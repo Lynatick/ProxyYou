@@ -1,6 +1,6 @@
 {
   "common": {
-    "appTitle": "هیدیفای",
+    "appTitle": "ProxyYou",
     "start": "شروع",
     "version": "نسخه",
     "ok": "باشه",
@@ -725,7 +725,6 @@
     "tapToConnect": "برای اتصال ضربه بزنید",
     "connect": "اتصال",
     "connecting": "در حال اتصال…",
-    "hotReloading": "در حال بارگذاری مجدد…",
     "connected": "متصل شد",
     "disconnect": "قطع اتصال",
     "disconnecting": "در حال قطع اتصال…",

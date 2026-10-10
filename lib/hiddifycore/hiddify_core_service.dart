@@ -1,17 +1,24 @@
 import 'dart:async';
 import 'dart:convert';
-
+import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:grpc/grpc.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
 import 'package:hiddify/core/logger/core_logger.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
+import 'package:hiddify/core/utils/latest_async_map.dart';
+import 'package:hiddify/features/app/core_resume_handler.dart';
+import 'package:hiddify/features/app_based_routing/mac_app_preferences.dart';
 import 'package:hiddify/features/connection/model/connection_failure.dart';
 import 'package:hiddify/features/log/model/log_level.dart' as config_log_level;
+import 'package:hiddify/features/profile/data/atomic_config_writer.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/hiddifycore/core_interface/core_interface_wrapper_stub.dart'
     if (dart.library.io) 'package:hiddify/hiddifycore/core_interface/core_interface_wrapper.dart';
+import 'package:hiddify/hiddifycore/core_interface/responsive_core_client.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcommon/common.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore_service.pbgrpc.dart';
@@ -37,7 +44,16 @@ class HiddifyCoreService with InfraLogger {
   final Map<String, StreamSubscription?> subscriptions = {};
   List<OutboundGroup> latest = [];
 
-  Future<void> init() async {
+  static const _systemProxy = MethodChannel('dev.proxyyou/system-proxy');
+  bool _macUseSystemProxy = false;
+  int _macMixedPort = 12334;
+
+  // Bootstrap and window lifecycle events share the same desktop initialization.
+  final _resumeHandler = CoreResumeHandler(isDesktop: PlatformUtils.isDesktop);
+
+  Future<void> init() => _resumeHandler.resume(_initialize);
+
+  Future<void> _initialize() async {
     await setup()
         .mapLeft((e) {
           loggy.error(e);
@@ -60,15 +76,27 @@ class HiddifyCoreService with InfraLogger {
 
   TaskEither<String, Unit> validateConfigByPath(String path, String tempPath, bool debug) {
     return TaskEither(() async {
-      try {
-        final response = await core.fgClient.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
-        if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
-      } catch (e) {
-        await setup().run();
-        final response = await core.fgClient.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
-        if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
+      Future<String?> validate(String destination) async {
+        ParseResponse response;
+        try {
+          response = await core.fgClient.parseForValidation(
+            ParseRequest(tempPath: tempPath, configPath: destination, debug: false),
+          );
+        } catch (_) {
+          await setup().run();
+          response = await core.fgClient.parseForValidation(
+            ParseRequest(tempPath: tempPath, configPath: destination, debug: false),
+          );
+        }
+        return response.responseCode == ResponseCode.OK ? null : "${response.responseCode} ${response.message}";
       }
-      return right(unit);
+
+      try {
+        final error = PlatformUtils.isMacOS ? await validateAndReplaceConfig(path, validate) : await validate(path);
+        return error == null ? right(unit) : left(error);
+      } catch (error) {
+        return left(error.toString());
+      }
     });
   }
 
@@ -83,6 +111,8 @@ class HiddifyCoreService with InfraLogger {
   TaskEither<String, Unit> setup() {
     return TaskEither(() async {
       try {
+        // Setup also runs during profile validation retries. It must preserve
+        // an active system proxy; launch recovery belongs to the native helper.
         final directories = ref.read(appDirectoriesProvider).requireValue;
         final debug = kDebugMode || ref.read(ConfigOptions.logLevel).isVerbose;
         final setupResponse = await core.setup(directories, debug, 3);
@@ -109,14 +139,52 @@ class HiddifyCoreService with InfraLogger {
   TaskEither<String, Unit> changeOptions(SingboxConfigOption options) {
     return TaskEither(() async {
       loggy.debug("changing options");
+      final coreOptions = PlatformUtils.isMacOS ? options.copyWith(setSystemProxy: false) : options;
+      if (PlatformUtils.isMacOS) {
+        if (ref.read(MacAppPreferences.enabled) && ref.read(macDiagnosticPortProvider) == null) {
+          final reservation = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+          ref.read(macDiagnosticPortProvider.notifier).state = reservation.port;
+          await reservation.close();
+        }
+        if (!ref.read(MacAppPreferences.enabled)) ref.read(macDiagnosticPortProvider.notifier).state = null;
+        _macUseSystemProxy = options.setSystemProxy;
+        _macMixedPort = options.mixedPort;
+        // The native bridge authorizes network preferences; the core must not run networksetup.
+      }
       // latestOptions = options;
       try {
         final res = await core.fgClient.changeHiddifySettings(
-          ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(options.toJson())),
+          ChangeHiddifySettingsRequest(
+            hiddifySettingsJson: jsonEncode({
+              ...coreOptions.toJson(),
+              if (PlatformUtils.isMacOS)
+                'proxyyou-app-routing': {
+                  'enabled': ref.read(MacAppPreferences.enabled),
+                  'mode': ref.read(MacAppPreferences.mode),
+                  'bundles': ref.read(MacAppPreferences.bundles),
+                  'diagnostic_port': ref.read(macDiagnosticPortProvider),
+                },
+              'connection-test-url': youtubeTestUrl,
+              'connection-test-urls': [youtubeTestUrl],
+            }),
+          ),
         );
         if (res.messageType != MessageType.EMPTY) return left("${res.messageType} ${res.message}");
         await core.bgClient.changeHiddifySettings(
-          ChangeHiddifySettingsRequest(hiddifySettingsJson: jsonEncode(options.toJson())),
+          ChangeHiddifySettingsRequest(
+            hiddifySettingsJson: jsonEncode({
+              ...coreOptions.toJson(),
+              if (PlatformUtils.isMacOS)
+                'proxyyou-app-routing': {
+                  'enabled': ref.read(MacAppPreferences.enabled),
+                  'mode': ref.read(MacAppPreferences.mode),
+                  'bundles': ref.read(MacAppPreferences.bundles),
+                  'diagnostic_port': ref.read(macDiagnosticPortProvider),
+                },
+              'connection-test-url': youtubeTestUrl,
+              'connection-test-urls': [youtubeTestUrl],
+            }),
+          ),
         );
       } on GrpcError catch (e) {
         if (e.code == StatusCode.unavailable) {
@@ -182,6 +250,23 @@ class HiddifyCoreService with InfraLogger {
                 ConnectionFailure.unexpected("failed to start core ${res.messageType} ${res.message}"),
           );
         }
+        if (PlatformUtils.isMacOS && _macUseSystemProxy) {
+          try {
+            await _systemProxy.invokeMethod<void>('enable', {'port': _macMixedPort});
+          } on PlatformException catch (e) {
+            // Roll back any committed preferences before shutting down the listener.
+            try {
+              await _systemProxy.invokeMethod<void>('restore');
+            } on PlatformException catch (restoreError) {
+              return left(
+                ConnectionFailure.unexpected(restoreError.message ?? 'Не удалось восстановить настройки сети.'),
+              );
+            }
+            await core.bgClient.stop(Empty());
+            statusController.add(currentState = const CoreStatus.stopped());
+            return left(ConnectionFailure.unexpected(e.message ?? 'Не удалось включить системный прокси.'));
+          }
+        }
       } on GrpcError catch (e) {
         loggy.error("failed to start bg core: $e");
         ref.read(coreRestartSignalProvider.notifier).restart();
@@ -192,7 +277,10 @@ class HiddifyCoreService with InfraLogger {
         // throw DioException.connectionError(requestOptions: RequestOptions(), reason: e.codeName, error: e);
 
         // throw DioException(requestOptions: RequestOptions(), error: e);
-        return left(const ConnectionFailure.unexpected("failed to start background core"));
+        if (e.message?.contains('operation not permitted') ?? false) {
+          return left(const ConnectionFailure.missingPrivilege());
+        }
+        return left(ConnectionFailure.unexpected(e.message ?? 'Не удалось запустить прокси-ядро.'));
       }
 
       // if (res.messageType != MessageType.EMPTY) return left(res);
@@ -205,6 +293,13 @@ class HiddifyCoreService with InfraLogger {
     return TaskEither(() async {
       loggy.debug("stopping");
       var errMsg = "";
+      if (PlatformUtils.isMacOS) {
+        try {
+          await _systemProxy.invokeMethod<void>('restore');
+        } on PlatformException catch (e) {
+          return left(e.message ?? 'Не удалось восстановить системный прокси.');
+        }
+      }
       try {
         await core.bgClient.stop(Empty());
       } on GrpcError catch (e) {
@@ -224,28 +319,15 @@ class HiddifyCoreService with InfraLogger {
     });
   }
 
-  /// Applies a changed config to the running core: first as a hot reload, which keeps the core
-  /// (and its connections) running; when the core cannot hot reload it (e.g. the TUN inbound
-  /// changed) or the hot reload fails, the core is restarted instead.
-  TaskEither<String, Unit> reload(String path, String name, bool disableMemoryLimit) {
-    return TaskEither(() async {
-      loggy.debug("hot reloading");
-      try {
-        final res = await core.bgClient.hotReload(
-          StartRequest(configPath: path, configName: name, disableMemoryLimit: disableMemoryLimit),
-        );
-        if (res.messageType == MessageType.EMPTY) return right(unit);
-        loggy.info("hot reload not applied, restarting: ${res.messageType} ${res.message}");
-      } on GrpcError catch (e) {
-        loggy.warning("hot reload failed, restarting: $e");
-      }
-      return restart(path, name, disableMemoryLimit).run();
-    });
-  }
-
   TaskEither<String, Unit> restart(String path, String name, bool disableMemoryLimit) {
     return TaskEither(() async {
       loggy.debug("restarting");
+      if (PlatformUtils.isMacOS) {
+        // Stop/start also applies changed proxy ports and restores previous network preferences.
+        final stopped = await stop().run();
+        if (stopped.isLeft()) return stopped;
+        return (await start(path, name, disableMemoryLimit).run()).mapLeft((failure) => failure.toString());
+      }
       // if (!await core.restart(path, name)) {
       try {
         final res = await core.bgClient.restart(
@@ -302,7 +384,11 @@ class HiddifyCoreService with InfraLogger {
       return;
     }
     try {
-      yield* core.bgClient.outboundsInfo(Empty()).map((event) => event.items.isEmpty ? null : event.items.first);
+      yield* latestAsyncMap(
+        core.bgClient.rawOutbounds(),
+        decodeOutboundSnapshot,
+        interval: const Duration(milliseconds: 250),
+      );
     } catch (e) {
       loggy.error("error watching group: $e");
       rethrow;
@@ -575,3 +661,8 @@ class HiddifyCoreService with InfraLogger {
     });
   }
 }
+
+Future<OutboundGroup?> decodeOutboundSnapshot(Uint8List bytes) => Isolate.run(() {
+  final groups = OutboundGroupList.fromBuffer(bytes).items;
+  return groups.isEmpty ? null : groups.first;
+});

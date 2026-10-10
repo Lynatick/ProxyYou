@@ -279,7 +279,8 @@ Win32Window::MessageHandler(HWND hwnd,
   }
 
   case WM_ACTIVATE:
-    if (child_content_ != nullptr)
+    // Losing activation must leave keyboard focus with the newly active app.
+    if (LOWORD(wparam) != WA_INACTIVE && child_content_ != nullptr)
     {
       SetFocus(child_content_);
     }

@@ -1,202 +1,127 @@
-<div dir="ltr" align=center>
-    
-[**![Lang_farsi](https://user-images.githubusercontent.com/125398461/234186932-52f1fa82-52c6-417f-8b37-08fe9250a55f.png) فارسی**](README_fa.md) / [**Русский 🇷🇺**](README_ru.md) / [**简体中文 🇨🇳**](README_cn.md) / [**日本語 🇯🇵**](README_ja.md) / [**Portugês-BR 🇧🇷**](README_br.md)
+# ProxyYou
 
-</div>
-<br>
+Клиент прокси для macOS Apple Silicon, Android / Android TV и Windows x64 на основе Flutter и Hiddify.
 
-<p align="center"><img src="https://github.com/hiddify/hiddify.com/blob/main/docs/assets/hiddify-app-logo.svg" width=56% /></p>
-<br>
+- [Релизы и загрузки](https://github.com/Lynatick/ProxyYou/releases)
+- [Порядок выпуска](docs/RELEASES.md)
+- [План обновлений через GitHub](docs/GITHUB_UPDATES.md)
+- [Сообщить об ошибке](https://github.com/Lynatick/ProxyYou/issues)
 
-<div align="center">
+Встроенное скачивание и установка обновлений ещё не реализованы. Проверки исходников запускаются автоматически; создание и публикация релизов выполняются вручную запускаемым workflow Release ProxyYou после проверки модифицированного ядра и подписей.
 
-<!--
-![Hiddify logo + text](https://github.com/hiddify/hiddify-app/assets/125398461/d821cfe0-b4c4-441f-be4e-eb9209f59542)
-    -->
-    
-[![GP-Intalls](https://img.shields.io/endpoint?color=green&logo=google-play&logoColor=green&url=https%3A%2F%2Fplay.cuzi.workers.dev%2Fplay%3Fi%3Dapp.hiddify.com%26l%3DGoogle%2520Play%26m%3D%24shortinstalls&style=flat-square)](https://play.google.com/store/apps/details?id=app.hiddify.com) [![Downloads](https://img.shields.io/github/downloads/hiddify/hiddify-next/total?style=flat-square&logo=github)](https://github.com/hiddify/hiddify-app/releases/)[![Last Version](https://img.shields.io/github/release/hiddify/hiddify-next/all.svg?style=flat-square)](https://github.com/hiddify/hiddify-app/releases/)[![Last Release Date](https://img.shields.io/github/release-date/hiddify/hiddify-next.svg?style=flat-square)](https://github.com/hiddify/hiddify-app/releases/)[![commits](https://img.shields.io/github/commit-activity/m/hiddify/hiddify-next?style=flat-square)](https://github.com/hiddify/hiddify-app/)
-[![Youtube](https://img.shields.io/youtube/channel/views/UCxrmeMvVryNfB4XL35lXQNg?label=Youtube&style=flat-square&logo=youtube)](https://www.youtube.com/@hiddify)[![Telegram Channel](https://img.shields.io/endpoint?label=Channel&style=flat-square&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fhiddify&color=blue)](https://telegram.dog/hiddify)[![Telegram Group](https://img.shields.io/endpoint?color=neon&label=Support%20Group&style=flat-square&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fhiddify_board)](https://telegram.dog/hiddify_board/5)
+Исходники распространяются по [Hiddify Extended GPL v3](LICENSE.md). Этот репозиторий — форк [Hiddify](https://github.com/hiddify/hiddify-app); дополнительные условия исходной лицензии сохранены.
 
-</div>
+ProxyYou 4.1.17: убрана подсказка над конфигурацией на Android TV. Windows сохраняет службу подключения при смене фокуса; обработчик потери активности больше не возвращает фокус окну приложения. Для Windows выпускается один EXE-установщик.
 
+ProxyYou 4.1.16: выбор программ с главной страницы (значок приложений). Android использует VPN-списки «только выбранные» / «исключить выбранные». macOS применяет правила по пути процесса внутри выбранного .app, включая вложенные процессы. macOS: только соединения через системный прокси; неизвестные/общие процессы идут напрямую, Safari не предлагается. Проверка YouTube использует отдельный локальный вход и сохраняет выбранный сервер.
 
+Для сборки macOS требуется Hiddify Core v4.1.0 с закреплёнными подмодулями. Запустите scripts/build-macos-core.sh /путь/к/core-source (Go 1.25.6), затем Flutter-сборку. Скрипт применяет native-patches/macos-app-routing.patch и патч мониторинга. Upstream-архив ядра не содержит новый фильтр.
 
+Android / TV 4.1.15: рамка фокуса толщиной один физический пиксель, тень ослаблена до 7% непрозрачности. Кнопки подключения/пинга снова высотой 48, прежняя ширина пинга 108/132 и стандартный размер текста. Управление пультом и цвета состояния сохранены. macOS остаётся в версии 4.1.14.
 
-## What is Hiddify app?
+ProxyYou 4.1.14: кнопка подключения зелёная при соединении и красная при ошибке. Android автоматически определяет TV: кнопки подключения/пинга высотой 64, управление стрелками/OK, контрастная жёлтая рамка фокуса на кнопках, списках и в диалогах, прокрутка к выбранному элементу. На телефонах сохранён компактный интерфейс. TV запускается из Leanback Launcher. Физический TV не использовался для проверки.
 
-<p dir="ltr" style="font-size: 16px">A multi-platform proxy client based on <a href="https://github.com/SagerNet/sing-box">Sing-box</a> universal proxy tool-chain. Hiddify offers a wide range of capabilities, like automatic node selection, TUN mode, remote profiles etc. Hiddify is ad-free and open-source. With support for a wide range of protocols, it provides a secure and private way for accessing free internet.</p>
+# ProxyYou
 
-<div align=center>
-<img width=90% alt="English Demo" src="https://github.com/hiddify/hiddify-app/assets/125398461/ffe5346d-3404-470f-b5e0-4364e23743d2">
+Windows x64 4.1.12: portable ZIP и установщик EXE, отдельные имя окна/процесса ProxyYou, проверка видео через WebView2 с отключённым кэшем и текущим HTTP-прокси. Предварительная проверка и лимит 20 обработчиков сохранены. Запуск проверен в Windows 11 в Parallels; подробности сборки — в WINDOWS.md.
 
-</div>
+macOS 4.1.13 сохраняет системный прокси при переключении между Chrome и окном ProxyYou: повторный фокус больше не перезапускает инициализацию ядра. Восстановление сетевых настроек после прерванного сеанса выполняется до запуска Flutter.
 
-## 🚀 Main features
+macOS 4.1.11 исправляет обновление профилей, файлы которых были созданы от имени root: проверка пишет новую конфигурацию в отдельный временный файл, затем атомарно заменяет прежний. При ошибке проверки сохранённая конфигурация остаётся на месте. Дополнительное разрешение администратора для сохранения профиля не требуется. Android остаётся в версии 4.1.10.
 
-✈️ Multi-platform: Android, iOS, Windows, macOS and Linux
+В 4.1.10 интерфейс закреплён на русском языке, выбор языка убран; переведено меню macOS. Предварительная проверка делает единственный запрос к `https://www.youtube.com/generate_204`. Проверки серверов используют тот же URL и до 20 одновременно работающих обработчиков; дополнительные IP-запросы ядра исключены. Для этого комплектное ядро v4.1.0 пересобрано с небольшим патчем, описанным в `native-patches/README.md`. Проверка воспроизведения YouTube по реальным кадрам сохранена.
 
-⭐ Intuitive and accessible UI
+Локальная версия клиента для macOS и Android на основе Hiddify. Сохранены механизм соединения, импорт конфигураций и управление подписками. Добавлены собственный главный экран и проверка фактического воспроизведения YouTube.
 
-🔍 Delay based node selection
+**Статус:** Android 4.1.17 и Windows x64 4.1.17, macOS 4.1.16. 204 Flutter-теста прошли, анализ без замечаний. Windows проверен с Edge на локальном стенде при 60 переключениях фокуса. Подробности и границы проверки — в VALIDATION.md.
 
-🟡 Wide range of protocols:
-Vless, Vmess, Reality, TUIC, Hysteria, Wireguard, SSH etc.
+Готовые файлы находятся рядом с папкой исходников: `ProxyYou-Android-4.1.17.apk` и `ProxyYou-macOS-AppleSilicon-4.1.16.zip`. Инструкция: `ИНСТРУКЦИЯ.md`.
 
-🟡 Subscription link and configuration formats: Sing-box, V2ray, Clash, Clash meta
+В версии 4.1.10 разбор подписок, декодирование списков ядра и сортировка выполняются вне потока интерфейса. Очередь обработки хранит только последнее ожидающее обновление; главная страница запрашивает полный список лишь при нажатии на пинг. Список серверов по-прежнему строится по мере прокрутки.
 
-🔄 Automatic subscription update
+## Возможности
 
-🔎 Display profile information including remaining days and traffic usage
+- Добавление подписки по URL, из буфера обмена, QR-кода и файла через существующий механизм Hiddify.
+- Выбор профиля и сервера, подключение и отключение через Hiddify Core.
+- Ручное обновление: кнопка обновления профиля или кнопка «Обновить подписки» на главном экране.
+- Проверка интервалов обновления каждые 15 минут при запущенном приложении; интервал самой подписки задаётся её метаданными и настройками профиля. Выполнение при закрытом приложении не гарантируется.
+- Автоматическая предварительная проверка сети после подключения и смены сервера. Отдельная кнопка проверки воспроизведения открывает настоящий плеер YouTube.
+- Раздельные идентификатор приложения `dev.proxyyou.client` и база `proxyyou_db`, чтобы не использовать базу установленного Hiddify.
 
-🛡 Open source, secure and community driven
+## Что проверяет YouTube
 
-🌙 Dark and light modes
+HTTPS-запрос к `https://www.youtube.com/generate_204` через HTTP CONNECT на `127.0.0.1:<mixed-port>`. Прямой выход при отказе этого порта отсутствует. Применяются текущие правила маршрутизации ядра: если пользователь направил YouTube через DIRECT в правилах, тест не доказывает прохождение через удалённый сервер.
 
-⚙ Compatible with all proxy management panels
+Проверяются точный HTTP-статус, пустой ответ 204, тип и сигнатура JPEG, TLS, ограничение размера и тайм-аут. Результаты сбрасываются при изменении соединения, профиля или тега сервера. Это только предварительная проверка сети. Она не устанавливает статус успешного воспроизведения.
 
-⭐ Appropriate configuration for Iran, China, Russia and other countries
+Кнопка «Проверить воспроизведение» открывает YouTube с тестовым видео `jNQXAC9IVRw`. Нажмите Play в плеере. Успех подтверждается после минимум **5 секунд непрерывного воспроизведения и 10 новых отображённых кадров**. Проверяется продвижение времени с обычной скоростью, готовность видео, его размеры, счётчик кадров и отсутствие рекламы. Пауза, перемотка, смена видео и источника сбрасывают накопленные данные. Окно закрывается при успехе, отмене либо через 90 секунд.
 
-📱 Available on official stores
+На macOS используется WKWebView с единственным HTTP CONNECT-прокси и запрещённым failover; эта проверка требует macOS 14+. На Android — WebView с ProxyController, единственным прокси без DIRECT и отключёнными неявными правилами обхода. Страница загружается после активации прокси. Если WebView не поддерживает прокси или счётчик кадров, показывается «не поддерживается», а не успех. Результат сбрасывается при смене соединения, профиля или сервера.
 
-## 🛍️ Get It On Stores
-<a href="https://apps.apple.com/us/app/hiddify-proxy-vpn/id6596777532?platform=iphone"><img height=50px src="https://github.com/user-attachments/assets/a7c62126-07ce-4f18-8197-bbb672f6d8be"></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://play.google.com/store/apps/details?id=app.hiddify.com"><img height=50px src="docs/google-play-badge.png"></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://apps.microsoft.com/detail/Hiddify/9pdfnl3qv2s5?mode=mini" target="_blank"><img height=50px src="https://github.com/hiddify/hiddify-next/assets/125398461/620750bb-4459-41b5-9f86-ba82119345b8" /></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Проверка подтверждает воспроизведение тестового видео в текущем подключении. Маршрут после локального ядра определяется его правилами; доступность остальных видео зависит также от региона и ограничений YouTube.
 
+## Сборка
 
-## 📥 Direct Download
+Требуются Flutter **3.38.5** (Dart 3.10.4), Git, curl, tar, OpenSSL и Node.js 18+. Скачивание Flutter и пакетов выполняйте из официальных источников. Версии приложения и зависимостей унаследованы от Hiddify; собственное имя продукта — ProxyYou.
 
-<div align=left>
-<table>
-    <thead align=left>
-        <tr>
-            <th>OS</th>
-            <th>Download</th>
-        </tr>
-    </thead>
-    <tbody align=left>
-        <tr>
-        <td>iOS</td>
-            <td>
-                <a href="https://github.com/hiddify/hiddify-app/releases/latest/download/Hiddify-iOS.ipa"><img src="https://img.shields.io/badge/IPA-Universal-c0c0c0.svg?logo=ios"></a>
-            </td>
-        </tr>
-        <tr>
-        <td>Android</td>
-            <td>
-                <a href="https://github.com/hiddify/hiddify-app/releases/latest/download/Hiddify-Android-universal.apk"><img src="https://img.shields.io/badge/APK-Universal-044d29.svg?logo=android"></a><br>
-                <a href="https://github.com/hiddify/hiddify-app/releases/latest/download/Hiddify-Android-arm64.apk"><img src="https://img.shields.io/badge/APK-ARMv8-168039.svg?logo=android"></a><br>
-                <a href="https://github.com/hiddify/hiddify-app/releases/latest/download/Hiddify-Android-arm7.apk"><img src="https://img.shields.io/badge/APK-ARMv7-45bf55.svg?logo=android"></a><br>
-                <a href="https://github.com/hiddify/hiddify-app/releases/latest/download/Hiddify-Android-x86_64.apk"><img src="https://img.shields.io/badge/APK-x64-96ed89.svg?logo=android"></a>
-            </td>
-        </tr>
-        <tr>
-            <td>Windows</td>
-            <td>
-                <a href="https://github.com/hiddify/hiddify-app/releases/latest/download/Hiddify-Windows-Setup-x64.Msix"><img src="https://img.shields.io/badge/OfficialSetup-x64-0078d7.svg?logo=windows"></a><br>
-                <a href="https://github.com/hiddify/hiddify-app/releases/latest/download/Hiddify-Windows-Setup-x64.exe"><img src="https://img.shields.io/badge/Setup-x64-2d7d9a.svg?logo=windows"></a><br>
-                <a href="https://github.com/hiddify/hiddify-app/releases/latest/download/Hiddify-Windows-Portable-x64.zip"><img src="https://img.shields.io/badge/Portable-x64-67b7d1.svg?logo=windows"></a>
-            </td>
-        </tr>
-        <tr>
-            <td>macOS</td>
-            <td>
-                <a href="https://apps.apple.com/us/app/hiddify-proxy-vpn/id6596777532"><img src="https://img.shields.io/badge/IPA-ARM-D33A54.svg?logo=apple"></a><br>
-                <a href="https://github.com/hiddify/hiddify-next/releases/latest/download/Hiddify-MacOS.dmg"><img src="https://img.shields.io/badge/DMG-Universal-ea005e.svg?logo=apple"></a><br>
-                <a href="https://github.com/hiddify/hiddify-next/releases/latest/download/Hiddify-MacOS-Installer.pkg"><img src="https://img.shields.io/badge/PKG-Universal-bc544b.svg?logo=apple" /></a>
-            </td>
-        </tr>
-        <tr>
-            <td>Linux</td>
-            <td>
-                <a href="https://github.com/hiddify/hiddify-app/releases/latest/download/Hiddify-Linux-x64.AppImage"><img src="https://img.shields.io/badge/AppImage-x64-f84e29.svg?logo=linux"> </a><br>
-                <a href="https://github.com/hiddify/hiddify-app/releases/latest/download/Hiddify-Debian-x64.deb"><img src="https://img.shields.io/badge/DebPackage-x64-FF9966.svg?logo=debian"> </a><br>
-                <a href="https://github.com/hiddify/hiddify-app/releases/latest/download/Hiddify-rpm-x64.rpm"><img src="https://img.shields.io/badge/RpmPackage-x64-F1B42F.svg?logo=redhat"> </a>
-            </td>
-        </tr>
-    </tbody>
-</table>
+### macOS
 
+Требуются macOS 14+, полный Xcode, активные инструменты Xcode, CocoaPods и платформенные зависимости Flutter. На Apple Silicon для инструментов этой версии Flutter может потребоваться Rosetta. Проверьте окружение командой `flutter doctor -v`.
 
-</div>
+```sh
+scripts/build-proxyyou.sh macos
+```
 
-## ⚙️ Installation and tutorials
+Результат: `build/macos/Build/Products/Release/ProxyYou.app`. Скрипт собирает архитектуру текущего Mac. Готовая локальная сборка проверена только для arm64. Настройки исходного проекта используют локальную подпись. Подпись Developer ID, нотарификация и выпуск DMG здесь не настроены и не проверены.
 
-**Find tutorial information on our wiki page by clicking on image below.**
+### Android
 
-<div align="center">
+Требуются JDK 17, Android SDK 36, Build Tools 36.0.0, NDK 28.2.13676358 и принятые пользователем лицензии Android SDK. Проверьте `flutter doctor -v`.
 
-[![Tutorials on Wiki](https://github.com/hiddify/hiddify-app/assets/125398461/95bb5cf8-c143-4934-87d6-b9d4c31e035e)](https://hiddify.com/app/)
+```sh
+scripts/build-proxyyou.sh android
+```
 
+Ожидаемый результат: APK в `build/app/outputs/flutter-apk/`. Если `android/key.properties` отсутствует, используется тестовая подпись из исходной конфигурации Hiddify. Готовый APK подписан таким ключом; проверка APK Signature Scheme v2 прошла. Для Google Play нужен отдельный ключ и настройка публикации.
 
-</div>
+Скрипт скачивает **Hiddify Core 4.1.0**, проверяет SHA-256, создаёт генерируемые файлы, запускает тесты проверки YouTube и собирает выбранную платформу. Хэши в `scripts/core-checksums.txt` сверены с GitHub Release API. Если менять версию ядра, нужно обновлять и проверять соответствующие хэши.
 
-## 🌎 Translations
+Также есть ручной GitHub Actions workflow `ProxyYou build`. Он сохраняет результаты как артефакты и не публикует релиз. Workflow подготовлен, но в GitHub не запускался.
 
-    
-You can improve existing languages or contribute new ones either by editing the JSON files in `/assets/translations` or [![Translate with Inlang](https://img.shields.io/badge/%20-%20-3ECF8E?logo=i18next&logoColor=white)](https://fink.inlang.com/github.com/hiddify/hiddify-app) by using [Inlang online editor](https://fink.inlang.com/github.com/hiddify/hiddify-app).    
+## Проверки
 
+```sh
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs
+dart run slang
+scripts/generate-test-certificates.sh
+flutter test test/features/youtube
+```
 
-## ✏️ Acknowledgements
+Для тестов используется локальный HTTPS-сервер и настоящий CONNECT-прокси. Тестовые сертификаты доверены только тестовому экземпляру клиента; в системе они не устанавливаются. Скрипт генерации обновляет их сроки действия. Ключ в `test/features/youtube/fixtures/` предназначен исключительно для localhost-тестов.
 
-We would like to express our sincere appreciation to the contributors of the following projects, whose robust foundation and innovative features have significantly enhanced the success and functionality of this project.
+На текущей машине прошли 17 Flutter-тестов: 10 сетевых и 7 проверки результата нативного плеера. Ещё 10 тестов JavaScript проверяют доказательства воспроизведения, включая перемотку, рекламу и отсутствие новых кадров. Их запуск: `node --test test/playback/proof.test.cjs`.
 
-- [Sing-box](https://github.com/SagerNet/sing-box)
-- [Sing-box for Android](https://github.com/SagerNet/sing-box-for-android)
-- [Sing-box for Apple](https://github.com/SagerNet/sing-box-for-apple)
-- [Clash](https://github.com/Dreamacro/clash)
-- [Clash Meta](https://github.com/MetaCubeX/Clash.Meta)
-- [FClash](https://github.com/Fclash/Fclash)
-- [Vazirmatn Font by Saber Rastikerdar](https://github.com/rastikerdar/vazirmatn)
-- [Others](./pubspec.yaml)
+Результаты сборок и границы проверки описаны в `VALIDATION.md`.
 
-## 🎯 Donation and Support
+## Происхождение и изменения
 
-The easiest way to support us is to click on the star (⭐) at the top of this page.
+Основа: [Hiddify](https://github.com/hiddify/hiddify-app), commit `5672f23d04d68fbfed18800a617b03718e747ebb`. Исходное описание сохранено в `README.upstream.md`.
 
-<div align=center>
-    
-<a href="https://next.ossinsight.io/widgets/official/analyze-repo-stars-history?repo_id=643504282" target="_blank" style="display: block" align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://next.ossinsight.io/widgets/official/analyze-repo-stars-history/thumbnail.png?repo_id=643504282&image_size=auto&color_scheme=dark" width="721" height="auto">
-    <img alt="Star History of hiddify/hiddify-app" src="https://next.ossinsight.io/widgets/official/analyze-repo-stars-history/thumbnail.png?repo_id=643504282&image_size=auto&color_scheme=light" width="721" height="auto">
-  </picture>
-</a>
+Изменены главный экран, имя продукта, идентификатор macOS/Android, имя базы и локализации заголовка. Добавлены `lib/features/youtube/`, нативные плееры, тесты, скрипты сборки и отдельный ручной workflow. Android-адаптер согласован с API выпущенного Core 4.1.0; удалены заглушки функций, отсутствующих в этом API. Для macOS выставлен минимум 14.0, новый значок использует обычный AppIcon asset catalog. Отключены уведомления об обновлениях приложения из канала Hiddify. Удалены унаследованные workflows публикации, подписи Microsoft и регистрации Winget; другие платформы исходного проекта оставлены в коде, но в этой версии не валидировались. Часть вспомогательных экранов, иконок и внутренних имён сохраняет оформление и происхождение Hiddify; это локальная версия для разработки.
 
-</div>
+[Happ](https://github.com/Happ-proxy/happ-desktop) изучен по доступному публичному репозиторию: он содержит README и материалы релизов, без исходников приложения. Код Happ не использовался. Подробности — в `ANALYSIS.md`.
 
-We also need financial support for our services. All of our activities are done voluntarily and financial support will be spent on the development of the project. You can view our support addresses [here](https://hiddify.com/donation-and-support/).
+## Лицензия
 
-## 👩‍🏫 Collaboration and Contact Information
+Сохранена [исходная лицензия Hiddify](LICENSE.md), включая её дополнительные условия. До распространения производной версии нужно выполнить указанные в ней условия: публичный GitHub fork Hiddify с актуальным кодом, выпуск через GitHub Actions, указание происхождения и изменений, сохранение лицензии. В лицензии также указаны ограничения коммерческого использования и публикации с похожим названием или интерфейсом. Публикация репозитория, магазина или релиза в этой работе не выполнялась.
 
-Hiddify is a community driven project. If you're interested in contributing, please read the [contribution guidelines](./CONTRIBUTING.md). We would specially appreciate any help we can get in these areas: **Flutter, Go, iOS development (Swift), Android development (Kotlin).**
+## Исправление macOS 4.1.3
 
-<div align=center>
+Устранён неавторизованный запуск networksetup внутри ядра: системный прокси настраивается нативно через SystemConfiguration на адрес 127.0.0.1. В macOS 4.1.6 после одного подтверждения при запуске работает отдельный временный помощник с правами администратора. Он принимает только включение прокси, восстановление и завершение через приватный канал приложения. Прежние настройки сохраняются и восстанавливаются при отключении, обычном выходе и следующем запуске после сбоя; изменения другого приложения не перезаписываются. Режим TUN скрыт на macOS, поскольку локальная сборка не содержит VPN-helper. Сохранённый выбор TUN читается как системный прокси. Android VPN не изменён.
 
-<br>
+Полностью завершите старую версию через «Выход» перед заменой: закрытие окна оставляет приложение в трее. При подключении подтвердите системный запрос macOS.
 
-[![Email](https://img.shields.io/badge/Email-contribute@hiddify.com-005FF9?style=flat-square&logo=mail.ru)](mailto:contribute@hiddify.com)
-[![Telegram Channel](https://img.shields.io/endpoint?label=Channel&style=flat-square&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fhiddify&color=blue)](https://telegram.dog/hiddify)
-[![Telegram Group](https://img.shields.io/endpoint?color=neon&label=Support%20Group&style=flat-square&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Fhiddify_board)](https://telegram.dog/hiddify_board)
-[![Youtube](https://img.shields.io/youtube/channel/views/UCxrmeMvVryNfB4XL35lXQNg?label=Youtube&style=flat-square&logo=youtube)](https://www.youtube.com/@hiddify)
-[![Twitter](https://img.shields.io/twitter/follow/hiddify_com?color=%231DA1F2&logo=twitter&logoColor=1DA1F2&style=flat-square)](https://twitter.com/intent/follow?screen_name=hiddify_com)
+## Интерфейс 4.1.4
 
-</div>
-
-<p align=center>
- We appreciate all people who are participating in this project. Some people here and many many more outside of Github. It means a lot to us. ♥
- </p>
- 
-<p align=center> 
-<a href="https://github.com/hiddify/hiddify-app/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=hiddify/hiddify-next" />
-</a>
-</p>
-<p align=center>
- Made with <a rel="" target="_blank" href="https://contrib.rocks">Contrib.Rocks</a> 
-</p>
-
-
-
-
-
-
-
+Добавление подписки перенесено в верхнюю панель: кнопка «+» рядом с обновлением подписок. Убраны заголовок «Ваше соединение», подсказка о выборе подписки и прежняя текстовая кнопка добавления.

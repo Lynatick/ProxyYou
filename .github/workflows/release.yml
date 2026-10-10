@@ -1,20 +1,52 @@
-name: Release
+name: Release ProxyYou
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+.*'
-
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Версия, например v4.1.18 (должна совпадать с pubspec.yaml)'
+        required: true
+        type: string
+      operation:
+        description: 'Создать черновик или опубликовать проверенный черновик'
+        required: true
+        type: choice
+        options: [prepare, publish]
+      signatures_verified:
+        description: 'Для публикации: подписи и установка всех пакетов проверены'
+        type: boolean
+        default: false
+permissions:
+  contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
+  group: release-proxyyou
+  cancel-in-progress: false
 jobs:
-  build-release:
-    uses: ./.github/workflows/build.yml
-    secrets: inherit
-    permissions: write-all
-    with:
-      upload-artifact: true
-      tag-name: "${{ github.ref_name }}"
-      channel: "${{ github.ref_type == 'tag' && endsWith(github.ref_name, 'dev') && 'dev' || github.ref_type != 'tag' && 'dev' || 'prod' }}"
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      checks: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      OPERATION: ${{ inputs.operation }}
+      SIGNATURES_VERIFIED: ${{ inputs.signatures_verified }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Verify version and successful source checks
+        run: |
+          python3 scripts/github_release.py preflight
+      - name: Create draft release
+        if: inputs.operation == 'prepare'
+        run: |
+          gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --draft --title "ProxyYou ${RELEASE_TAG#v}" --notes 'Черновик: загрузите проверенные APK, macOS ZIP, Windows Setup EXE и SHA256SUMS.txt. Публикация выполняется workflow Release ProxyYou.'
+      - name: Verify and publish existing draft
+        if: inputs.operation == 'publish'
+        run: |
+          python3 scripts/github_release.py verify-draft
+          gh release edit "$RELEASE_TAG" --draft=false --latest

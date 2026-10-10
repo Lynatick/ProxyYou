@@ -5,6 +5,8 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
+import java.util.Locale
 import android.net.ConnectivityManager
 import android.os.PowerManager
 import androidx.core.content.getSystemService
@@ -15,7 +17,14 @@ import com.hiddify.hiddify.Application as BoxApplication
 class Application : Application() {
 
     override fun attachBaseContext(base: Context?) {
-        super.attachBaseContext(base)
+        val russian = Locale("ru")
+        Locale.setDefault(russian)
+        val localized = base?.let {
+            val config = Configuration(it.resources.configuration)
+            config.setLocale(russian)
+            it.createConfigurationContext(config)
+        }
+        super.attachBaseContext(localized)
         application = this
     }
 

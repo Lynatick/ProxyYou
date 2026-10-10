@@ -71,7 +71,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "app.hiddify.com"
+        applicationId "dev.proxyyou.client"
         minSdkVersion flutter.minSdkVersion
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()
@@ -144,6 +144,7 @@ flutter {
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar', '*.aar'])
 
+    implementation 'androidx.webkit:webkit:1.12.1'
     implementation 'com.google.code.gson:gson:2.11.0'
     implementation 'androidx.core:core-ktx:1.16.0'
     implementation 'androidx.appcompat:appcompat:1.7.0'

@@ -1,5 +1,8 @@
 package com.hiddify.hiddify
 
+import android.app.UiModeManager
+import android.content.Context
+import android.content.res.Configuration
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.Manifest
@@ -18,6 +21,7 @@ import com.hiddify.hiddify.constant.Alert
 import com.hiddify.hiddify.constant.ServiceMode
 import com.hiddify.hiddify.constant.Status
 import io.flutter.embedding.android.FlutterFragmentActivity
+import io.flutter.plugin.common.MethodChannel
 import io.flutter.embedding.engine.FlutterEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,6 +38,8 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
         const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1010
     }
 
+    private var playbackProbe: YoutubePlaybackProbe? = null
+
     private val connection = ServiceConnection(this, this)
 
     val logList = LinkedList<String>()
@@ -43,6 +49,19 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        playbackProbe = YoutubePlaybackProbe(this, MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.proxyyou/playback"))
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.proxyyou/device")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "isTelevision") {
+                    val mode = getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
+                    result.success(
+                        mode.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
+                            packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+                    )
+                } else {
+                    result.notImplemented()
+                }
+            }
         instance = this
         reconnect()
         flutterEngine.plugins.add(MethodHandler(lifecycleScope))
@@ -133,6 +152,7 @@ class MainActivity : FlutterFragmentActivity(), ServiceConnection.Callback {
 
 
     override fun onDestroy() {
+        playbackProbe?.close()
         connection.disconnect()
         super.onDestroy()
     }

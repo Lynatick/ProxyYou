@@ -13,8 +13,6 @@ sealed class CoreStatus with _$CoreStatus {
   const factory CoreStatus.starting() = CoreStarting;
   const factory CoreStatus.started() = CoreStarted;
   const factory CoreStatus.stopping() = CoreStopping;
-  // the running core applies a new config; the connection stays up
-  const factory CoreStatus.hotReloading() = CoreHotReloading;
 
   factory CoreStatus.fromEvent(dynamic event) {
     event = event as Map<String, dynamic>?;
@@ -35,8 +33,6 @@ sealed class CoreStatus with _$CoreStatus {
         return const CoreStarted();
       case "Stopping":
         return const CoreStopping();
-      case "HotReloading":
-        return const CoreHotReloading();
       default:
         throw Exception("unexpected status [$event]");
     }
@@ -72,8 +68,6 @@ sealed class CoreStatus with _$CoreStatus {
         return const CoreStarted();
       case CoreStates.STOPPING:
         return const CoreStopping();
-      case CoreStates.HOT_RELOADING:
-        return const CoreHotReloading();
       default:
         throw Exception("unexpected status [$event]");
     }

@@ -21,20 +21,6 @@ class LocalePrefTile extends ConsumerWidget {
       title: Text(t.pages.settings.general.locale),
       subtitle: Text(locale.localeName),
       leading: const Icon(Icons.translate_rounded),
-      onTap: () async {
-        final selectedLocale = await ref
-            .read(dialogNotifierProvider.notifier)
-            .showSettingPicker<AppLocale>(
-              title: t.pages.settings.general.locale,
-              selected: locale,
-              onReset: () => ref.read(localePreferencesProvider.notifier).changeLocale(AppLocale.en),
-              options: AppLocale.values,
-              getTitle: (e) => e.localeName,
-            );
-        if (selectedLocale != null) {
-          await ref.read(localePreferencesProvider.notifier).changeLocale(selectedLocale);
-        }
-      },
     );
   }
 }

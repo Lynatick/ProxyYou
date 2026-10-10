@@ -77,3 +77,22 @@ windows/sign.cer
 /cert.pem
 /key.pem
 /sign.pfx
+
+# Local core download cache for ProxyYou builds
+.build-cache/
+
+# Local signing, user data, and generated test certificates
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.key
+*.pem
+.env
+.env.*
+android/key.properties
+**/local.properties
+macos/com.apple.DeveloperTools/
+/test/features/youtube/fixtures/*.crt
+/out/
+/hiddify_portable_data/

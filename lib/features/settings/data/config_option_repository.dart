@@ -20,7 +20,9 @@ abstract class ConfigOptions {
   static final serviceMode = PreferencesNotifier.create<ServiceMode, String>(
     "service-mode",
     ServiceMode.defaultMode,
-    mapFrom: (value) => ServiceMode.choices.firstWhere((e) => e.key == value),
+    mapFrom: (value) => PlatformUtils.isMacOS && value == ServiceMode.tun.key
+        ? ServiceMode.systemProxy
+        : ServiceMode.choices.firstWhere((e) => e.key == value),
     mapTo: (value) => value.key,
   );
 
@@ -143,20 +145,9 @@ abstract class ConfigOptions {
 
   static final connectionTestUrl = PreferencesNotifier.create<String, String>(
     "connection-test-url",
-    "http://captive.apple.com/hotspot-detect.html",
-    possibleValues: List.of([
-      "http://connectivitycheck.gstatic.com/generate_204",
-      "http://www.gstatic.com/generate_204",
-      "https://www.gstatic.com/generate_204",
-      "https://redirector.googlevideo.com/generate_204",
-      "http://cp.cloudflare.com",
-      "http://kernel.org",
-      "http://detectportal.firefox.com",
-      "http://captive.apple.com/hotspot-detect.html",
-      "https://1.1.1.1",
-      "http://1.1.1.1",
-    ]),
-    validator: (value) => value.isNotBlank && isUrl(value),
+    "https://www.youtube.com/generate_204",
+    possibleValues: const ["https://www.youtube.com/generate_204"],
+    validator: (value) => value == "https://www.youtube.com/generate_204",
   );
 
   static final urlTestInterval = PreferencesNotifier.create<Duration, int>(

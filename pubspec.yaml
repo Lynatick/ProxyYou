@@ -1,7 +1,7 @@
 name: hiddify
 description: Cross Platform Multi Protocol Proxy Frontend.
 publish_to: "none"
-version: 5.0.0+50000
+version: 4.1.17+40117
 
 environment:
   sdk: ^3.10.4
@@ -124,6 +124,7 @@ dependencies:
   # Used for registering custom schemes in the Windows registry
   win32: ^5.12.0
   humanizer: ^3.0.1
+  webview_windows: 0.4.0
 
 dev_dependencies:
   flutter_test:
@@ -147,6 +148,7 @@ flutter:
   assets:
     # - assets/core/geoip.db
     # - assets/core/geosite.db
+    - assets/playback/proof.js
     - assets/images/logo.svg
     - assets/images/tray_icon.ico
     - assets/images/tray_icon.png

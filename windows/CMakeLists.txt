@@ -1,10 +1,10 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
-project(hiddify LANGUAGES CXX)
+project(proxyyou LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "Hiddify")
+set(BINARY_NAME "ProxyYou")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -81,16 +81,16 @@ install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
-# install(FILES "../hiddify-core/bin/hiddify-core.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+# install(FILES "../hiddify-core/windows-x64/hiddify-core.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
 #  COMPONENT Runtime)
 
-install(FILES "../hiddify-core/bin/hiddify-core.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+install(FILES "../hiddify-core/windows-x64/hiddify-core.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
 COMPONENT Runtime RENAME hiddify-core.dll)
 
-install(FILES "../hiddify-core/bin/libcronet.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+install(FILES "../hiddify-core/windows-x64/libcronet.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
 COMPONENT Runtime RENAME libcronet.dll)
 
-install(FILES "../hiddify-core/bin/HiddifyCli.exe" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+install(FILES "../hiddify-core/windows-x64/HiddifyCli.exe" DESTINATION "${CMAKE_INSTALL_PREFIX}"
 COMPONENT Runtime RENAME HiddifyCli.exe)
 
 

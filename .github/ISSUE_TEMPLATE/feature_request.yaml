@@ -1,14 +1,10 @@
-name: Feature Request
-description: Request a new feature
-title: '[FR] '
+name: Предложение
+description: Предложить изменение ProxyYou
+labels: [enhancement]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        # Only English
   - type: textarea
+    id: proposal
     attributes:
-      label: Feature description
-      description: Please provide a clear and concise description of what you want to happen and what problem will this solve.
+      label: Предложение и задача, которую оно решает
     validations:
       required: true

@@ -7,12 +7,11 @@ import 'package:grpc/grpc.dart';
 import 'package:hiddify/core/model/directories.dart';
 import 'package:hiddify/gen/hiddify_core_generated_bindings.dart';
 import 'package:hiddify/hiddifycore/core_interface/core_interface.dart';
+import 'package:hiddify/hiddifycore/core_interface/responsive_core_client.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hello/hello.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hello/hello_service.pbgrpc.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
-
 import 'package:path/path.dart' as p;
 
 final _logger = infraLogger('HiddifyCoreFFI');
@@ -54,6 +53,8 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   }
 
   final port = 17078;
+  int? _windowsPort;
+  Future<String>? _windowsSetup;
   static String generateRandomPassword(int length) {
     const characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final random = Random();
@@ -64,6 +65,18 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
 
   @override
   Future<String> setup(Directories directories, bool debug, int mode) async {
+    if (Platform.isWindows) {
+      return _windowsSetup ??= _setupWindows(directories, debug).then(
+        (error) {
+          if (error.isNotEmpty) _windowsSetup = null;
+          return error;
+        },
+        onError: (Object error, StackTrace stack) {
+          _windowsSetup = null;
+          Error.throwWithStackTrace(error, stack);
+        },
+      );
+    }
     // Generate a random password for the grpc service
     // final errPtr2 = _box.stop();
     // final err = errPtr2.cast<Utf8>().toDartString();
@@ -101,7 +114,7 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
       final res = await helloClient.sayHello(HelloRequest(name: "test"));
       loggy.info(res.toString());
     }
-    bgClient = fgClient = CoreClient(
+    bgClient = fgClient = ResponsiveCoreClient(
       ClientChannel(
         'localhost',
         port: port,
@@ -116,6 +129,41 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     );
 
     return "";
+  }
+
+  Future<String> _setupWindows(Directories directories, bool debug) async {
+    // A separate process must never reuse another application's foreground
+    // core simply because it answers on Hiddify's default port.
+    if (_windowsPort == null) {
+      final reservation = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      _windowsPort = reservation.port;
+      await reservation.close();
+    }
+    final errorPointer = _box.setup(
+      directories.baseDir.path.toNativeUtf8().cast(),
+      directories.workingDir.path.toNativeUtf8().cast(),
+      directories.tempDir.path.toNativeUtf8().cast(),
+      SetupMode.GRPC_NORMAL_INSECURE.value,
+      '127.0.0.1:$_windowsPort'.toNativeUtf8().cast(),
+      secret.toNativeUtf8().cast(),
+      0,
+      debug ? 1 : 0,
+    );
+    final error = errorPointer.cast<Utf8>().toDartString();
+    if (error.isNotEmpty) return error;
+    final channel = ClientChannel(
+      '127.0.0.1',
+      port: _windowsPort!,
+      options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+    );
+    try {
+      await HelloClient(channel).sayHello(HelloRequest(name: 'ProxyYou')).timeout(const Duration(seconds: 10));
+      bgClient = fgClient = ResponsiveCoreClient(channel);
+      return '';
+    } catch (_) {
+      await channel.shutdown();
+      rethrow;
+    }
   }
 
   @override

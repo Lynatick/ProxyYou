@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:hiddify/core/notification/toast_hover_pause.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -27,25 +26,22 @@ class InAppNotificationController with AppLogger {
       final text = Text(message, maxLines: 6, softWrap: true, overflow: TextOverflow.ellipsis);
       late final ToastificationItem item;
       return item = toastification.show(
-        title: ToastHoverPause(
-          item: () => item,
-          child: action == null
-              ? text
-              : Row(
-                  children: [
-                    Expanded(child: text),
-                    // in the color of the toast's icon
-                    TextButton(
-                      style: TextButton.styleFrom(foregroundColor: type._toastificationType.color),
-                      onPressed: () {
-                        toastification.dismiss(item);
-                        action.onPressed();
-                      },
-                      child: Text(action.label),
-                    ),
-                  ],
-                ),
-        ),
+        title: action == null
+            ? text
+            : Row(
+                children: [
+                  Expanded(child: text),
+                  // in the color of the toast's icon
+                  TextButton(
+                    style: TextButton.styleFrom(foregroundColor: type._toastificationType.color),
+                    onPressed: () {
+                      toastification.dismiss(item);
+                      action.onPressed();
+                    },
+                    child: Text(action.label),
+                  ),
+                ],
+              ),
         // the button's own padding stands in for the toast's at the end
         padding: action == null ? null : const EdgeInsetsDirectional.fromSTEB(20, 16, 4, 16),
         type: type._toastificationType,
@@ -54,8 +50,7 @@ class InAppNotificationController with AppLogger {
         // 4 s, a Material 3 snackbar's time; 8 s with a button, to read it and reach the button
         autoCloseDuration: action == null ? const Duration(seconds: 4) : const Duration(seconds: 8),
         style: ToastificationStyle.flat,
-        // see ToastHoverPause
-        pauseOnHover: false,
+        pauseOnHover: true,
         showProgressBar: false,
         dragToClose: true,
         closeOnClick: true,

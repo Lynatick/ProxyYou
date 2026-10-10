@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:dartx/dartx.dart';
 import 'package:dio/dio.dart';
@@ -69,32 +70,29 @@ class ProfileParser {
     required String content,
     required String tempFilePath,
     required UserOverride? userOverride,
-  }) {
-    return TaskEither.tryCatch(() async {
-          await expandRemoteLinesInParallel(
-            tempFilePath: tempFilePath,
-            httpClient: _httpClient,
-            cancelToken: CancelToken(),
-            ref: _ref,
-          );
-        }, (_, _) => const ProfileFailure.unexpected())
-        .flatMap((_) => TaskEither.fromEither(populateHeaders(content: content)))
-        .flatMap(
-          (populatedHeaders) => TaskEither.fromEither(
-            parse(
+  }) =>
+      TaskEither.tryCatch(() async {
+            await expandRemoteLinesInParallel(
               tempFilePath: tempFilePath,
+              httpClient: _httpClient,
+              cancelToken: CancelToken(),
+              ref: _ref,
+            );
+          }, ProfileFailure.unexpected)
+          .flatMap(
+            (_) => parseFileAsync(
+              tempFilePath: tempFilePath,
+              content: content,
               profile: ProfileEntity.local(
                 id: id,
                 active: true,
                 name: '',
                 lastUpdate: DateTime.now(),
                 userOverride: userOverride,
-                populatedHeaders: populatedHeaders,
               ),
-            ).flatMap((profEntity) => Either.tryCatch(() => profEntity.toInsertEntry(), ProfileFailure.unexpected)),
-          ),
-        );
-  }
+            ),
+          )
+          .map((profile) => profile.toInsertEntry());
 
   TaskEither<ProfileFailure, ProfileEntriesCompanion> addRemote({
     required String id,
@@ -102,55 +100,62 @@ class ProfileParser {
     required String tempFilePath,
     required UserOverride? userOverride,
     CancelToken? cancelToken,
-  }) => _downloadProfile(url, tempFilePath, cancelToken).flatMap(
-    (remoteHeaders) =>
-        TaskEither.fromEither(
-          populateHeaders(content: File(tempFilePath).readAsStringSync(), remoteHeaders: remoteHeaders),
-        ).flatMap(
-          (populatedHeaders) => TaskEither.fromEither(
-            parse(
-              tempFilePath: tempFilePath,
-              profile: ProfileEntity.remote(
-                id: id,
-                active: true,
-                name: '',
-                url: url,
-                lastUpdate: DateTime.now(),
-                userOverride: userOverride,
-                populatedHeaders: populatedHeaders,
-              ),
-            ).flatMap((profEntity) => Either.tryCatch(() => profEntity.toInsertEntry(), ProfileFailure.unexpected)),
+  }) => _downloadProfile(url, tempFilePath, cancelToken)
+      .flatMap(
+        (headers) => parseFileAsync(
+          tempFilePath: tempFilePath,
+          remoteHeaders: headers,
+          profile: ProfileEntity.remote(
+            id: id,
+            active: true,
+            name: '',
+            url: url,
+            lastUpdate: DateTime.now(),
+            userOverride: userOverride,
           ),
         ),
-  );
+      )
+      .map((profile) => profile.toInsertEntry());
 
   TaskEither<ProfileFailure, ProfileEntriesCompanion> updateRemote({
     required RemoteProfileEntity rp,
     required String tempFilePath,
     CancelToken? cancelToken,
-  }) => _downloadProfile(rp.url, tempFilePath, cancelToken).flatMap(
-    (remoteHeaders) =>
-        TaskEither.fromEither(
-          populateHeaders(content: File(tempFilePath).readAsStringSync(), remoteHeaders: remoteHeaders),
-        ).flatMap(
-          (populatedHeaders) => TaskEither.fromEither(
-            parse(
-              tempFilePath: tempFilePath,
-              profile: rp.copyWith(populatedHeaders: populatedHeaders),
-            ).flatMap((profEntity) => Either.tryCatch(() => profEntity.toUpdateEntry(), ProfileFailure.unexpected)),
-          ),
-        ),
-  );
+  }) => _downloadProfile(rp.url, tempFilePath, cancelToken)
+      .flatMap((headers) => parseFileAsync(tempFilePath: tempFilePath, remoteHeaders: headers, profile: rp))
+      .map((profile) => profile.toUpdateEntry());
 
-  Either<ProfileFailure, ProfileEntriesCompanion> offlineUpdate({
+  TaskEither<ProfileFailure, ProfileEntriesCompanion> offlineUpdate({
     required ProfileEntity profile,
     required String tempFilePath,
-  }) => profile
-      .map(
-        remote: (rp) => parse(profile: rp, tempFilePath: tempFilePath),
-        local: (lp) => parse(tempFilePath: tempFilePath, profile: lp),
-      )
-      .flatMap((profEntity) => Either.tryCatch(() => profEntity.toUpdateEntry(), ProfileFailure.unexpected));
+  }) => parseFileAsync(
+    tempFilePath: tempFilePath,
+    profile: profile,
+    refreshHeaders: false,
+  ).map((profile) => profile.toUpdateEntry());
+
+  // Capture only transferable arguments, never this parser or its Riverpod Ref.
+  @visibleForTesting
+  static TaskEither<ProfileFailure, ProfileEntity> parseFileAsync({
+    required String tempFilePath,
+    required ProfileEntity profile,
+    String? content,
+    Map<String, dynamic>? remoteHeaders,
+    bool refreshHeaders = true,
+  }) => TaskEither.tryCatch(
+    () async => (await Isolate.run(() {
+      final headers = refreshHeaders
+          ? populateHeaders(content: content ?? File(tempFilePath).readAsStringSync(), remoteHeaders: remoteHeaders)
+          : Right<ProfileFailure, Map<String, dynamic>>(profile.populatedHeaders ?? {});
+      return headers.flatMap(
+        (headers) => parse(
+          tempFilePath: tempFilePath,
+          profile: profile.copyWith(populatedHeaders: headers),
+        ),
+      );
+    })).getOrElse((error) => throw error),
+    (error, stack) => error is ProfileFailure ? error : ProfileFailure.unexpected(error, stack),
+  );
 
   TaskEither<ProfileFailure, Map<String, dynamic>> _downloadProfile(
     String url,
@@ -194,8 +199,9 @@ class ProfileParser {
     required Ref ref,
     int parallelism = 4,
   }) async {
-    final content = await File(tempFilePath).readAsString();
-    final lines = content.split('\n');
+    final lines = await readSubscriptionLines(tempFilePath, skipStructured: true);
+    // JSON/INI already contains structured configurations, not embedded URL lines.
+    if (lines.isEmpty) return;
 
     final results = List<String?>.filled(lines.length, null);
 
@@ -208,6 +214,8 @@ class ProfileParser {
         final currentIndex = index++;
         if (currentIndex >= lines.length) return;
 
+        // Yield even when thousands of lines require no network request.
+        if (currentIndex % 256 == 0) await Future<void>.delayed(Duration.zero);
         final line = lines[currentIndex];
 
         // Non-URL
@@ -216,9 +224,8 @@ class ProfileParser {
           continue;
         }
 
+        final tmpPath = '$tempFilePath.$currentIndex';
         try {
-          final tmpPath = '$tempFilePath.$currentIndex';
-
           await httpClient.download(
             line,
             tmpPath,
@@ -228,12 +235,15 @@ class ProfileParser {
                 : null,
           );
 
-          results[currentIndex] = (await File(tmpPath).readAsString()).trim();
+          results[currentIndex] = (await readSubscriptionContent(tmpPath)).trim();
         } catch (err) {
           if (err is DioException && CancelToken.isCancel(err)) {
             return;
           }
           results[currentIndex] = '';
+        } finally {
+          final temporary = File(tmpPath);
+          if (await temporary.exists()) await temporary.delete();
         }
       }
     }
@@ -241,10 +251,8 @@ class ProfileParser {
     // Start workers
     await Future.wait(List.generate(parallelism, (_) => worker()));
 
-    if (results.any((e) => e != null)) {
-      final newContent = results.join("\n");
-      await File(tempFilePath).writeAsString(newContent);
-    }
+    if (cancelToken.isCancelled) throw cancelToken.cancelError!;
+    await writeSubscriptionLines(tempFilePath, results);
   }
 
   static Either<ProfileFailure, Map<String, dynamic>> populateHeaders({
@@ -458,6 +466,7 @@ class ProfileParser {
           fragment ?? _schemeLabel(scheme),
         _ => null,
       };
+      if (name != null) return name;
     }
     return name ?? ProxyType.unknown.label;
   }
@@ -583,3 +592,18 @@ class ProfileParser {
     return main;
   }
 }
+
+@visibleForTesting
+Future<List<String>> readSubscriptionLines(String path, {bool skipStructured = false}) => Isolate.run(() {
+  final content = File(path).readAsStringSync();
+  final first = content.trimLeft();
+  if (skipStructured && (first.startsWith('{') || first.startsWith('['))) return <String>[];
+  return content.split('\n');
+});
+
+Future<void> writeSubscriptionLines(String path, List<String?> lines) =>
+    Isolate.run(() => File(path).writeAsStringSync(lines.join('\n')));
+
+Future<String> readSubscriptionContent(String path) => Isolate.run(() => File(path).readAsStringSync());
+Future<void> writeSubscriptionContent(String path, String content) =>
+    Isolate.run(() => File(path).writeAsStringSync(content));

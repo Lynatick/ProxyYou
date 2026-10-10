@@ -1,0 +1,40 @@
+import 'dart:isolate';
+import 'dart:typed_data';
+
+import 'package:grpc/grpc.dart';
+import 'package:hiddify/hiddifycore/generated/v2/hcommon/common.pb.dart';
+import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
+import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore_service.pbgrpc.dart';
+
+/// Keep protobuf decoding of large outbound snapshots off the UI isolate.
+class ResponsiveCoreClient extends CoreClient {
+  ResponsiveCoreClient(super.channel, {super.options, super.interceptors});
+
+  static final _rawOutbounds = ClientMethod<Empty, Uint8List>(
+    '/hcore.Core/OutboundsInfo',
+    (request) => request.writeToBuffer(),
+    (bytes) => bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+  );
+
+  static final _rawParse = ClientMethod<ParseRequest, Uint8List>(
+    '/hcore.Core/Parse',
+    (request) => request.writeToBuffer(),
+    (bytes) => bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
+  );
+
+  Future<ParseResponse> parseForValidation(ParseRequest request) async {
+    final bytes = await $createUnaryCall(_rawParse, request);
+    return decodeValidationResponse(bytes);
+  }
+
+  ResponseStream<Uint8List> rawOutbounds() => $createStreamingCall(_rawOutbounds, Stream.value(Empty()));
+}
+
+Future<ParseResponse> decodeValidationResponse(Uint8List bytes) => Isolate.run(() {
+  final result = ParseResponse.fromBuffer(bytes);
+  // The core has already written content to configPath. Import needs only status.
+  return ParseResponse(responseCode: result.responseCode, message: result.message);
+});
+
+const youtubeTestUrl = 'https://www.youtube.com/generate_204';
+const concurrentServerTests = 20;

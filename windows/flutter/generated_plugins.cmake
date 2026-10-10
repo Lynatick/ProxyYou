@@ -12,6 +12,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   tray_manager
   url_launcher_windows
   vclibs
+  webview_windows
   window_manager
 )
 
