@@ -3,10 +3,10 @@
 Клиент прокси для macOS Apple Silicon, Android / Android TV и Windows x64 на основе Flutter и Hiddify.
 
 - [Страница загрузки](https://lynatick.github.io/proxyyou/)
-- [Релизы и загрузки](https://github.com/Lynatick/proxyyou/releases)
+- [Релизы и загрузки](https://github.com/lynatick/proxyyou/releases)
 - [Порядок выпуска](docs/RELEASES.md)
 - [План обновлений через GitHub](docs/GITHUB_UPDATES.md)
-- [Сообщить об ошибке](https://github.com/Lynatick/proxyyou/issues)
+- [Сообщить об ошибке](https://github.com/lynatick/proxyyou/issues)
 
 Встроенное скачивание и установка обновлений ещё не реализованы. Проверки исходников запускаются автоматически; создание и публикация релизов выполняются вручную запускаемым workflow Release ProxyYou после проверки модифицированного ядра и подписей.
 

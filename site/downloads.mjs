@@ -1,4 +1,4 @@
-const REPOSITORY = 'Lynatick/proxyyou';
+const REPOSITORY = 'lynatick/proxyyou';
 const RELEASES_URL = `https://github.com/${REPOSITORY}/releases`;
 const PATTERNS = {
   macos: /^ProxyYou-macOS-AppleSilicon-\d+\.\d+\.\d+\.zip$/i,

@@ -38,10 +38,16 @@ def verify_draft():
     v = version()
     require(os.environ.get("ARTIFACTS_VERIFIED") == "true", "Confirm artifact validation and disclosure of signing status before publication")
     repo, tag = os.environ["GH_REPO"], os.environ["RELEASE_TAG"]
-    release = api(f"repos/{repo}/releases/tags/{tag}")
+    releases = api(f"repos/{repo}/releases?per_page=100")
+    matching = [r for r in releases if r["tag_name"] == tag]
+    require(len(matching) == 1, "Expected one release for the requested version")
+    release = matching[0]
     require(release["draft"] and not release["prerelease"], "Expected a stable draft release")
-    commit = api(f"repos/{repo}/commits/{tag}")
-    require(commit["sha"] == os.environ["GITHUB_SHA"], "Release tag must point to this validated commit")
+    commit = api(f"repos/{repo}/commits/{release['target_commitish']}")
+    require(commit["sha"] == os.environ["GITHUB_SHA"], "Draft release must target this validated commit")
+    refs = api(f"repos/{repo}/git/matching-refs/tags/{tag}")
+    if any(r["ref"] == f"refs/tags/{tag}" for r in refs):
+        require(api(f"repos/{repo}/commits/{tag}")["sha"] == os.environ["GITHUB_SHA"], "Existing release tag differs from the validated commit")
     expected = {f"ProxyYou-Android-{v}.apk", f"ProxyYou-macOS-AppleSilicon-{v}.zip", f"ProxyYou-Windows-x64-{v}-Setup.exe"}
     names = {a["name"] for a in release["assets"]}
     require(expected | {"SHA256SUMS.txt"} <= names, "Missing platform packages or SHA256SUMS.txt")

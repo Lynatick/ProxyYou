@@ -1,6 +1,6 @@
 # Выпуск обновлений
 
-Источник релизов: https://github.com/Lynatick/proxyyou/releases.
+Источник релизов: https://github.com/lynatick/proxyyou/releases.
 
 Репозиторий подготовлен для исходников и релизов. Установщик обновлений пока не реализован; `allowAppUpdates` остаётся `false`. `appcast.xml` нужно добавить после интеграции Sparkle и настройки подписи, а не заменять пустым рабочим каналом.
 
