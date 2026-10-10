@@ -1,4 +1,4 @@
-﻿param([string]$Version = '4.1.17', [string]$BuildNumber = '40117', [switch]$SkipTests, [switch]$InstallerOnly)
+﻿param([string]$Version = '4.1.18', [string]$BuildNumber = '40118', [switch]$SkipTests, [switch]$InstallerOnly)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Set-Location (Join-Path $PSScriptRoot '..')

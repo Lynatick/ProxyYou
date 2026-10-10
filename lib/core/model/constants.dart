@@ -5,11 +5,11 @@ import 'package:hiddify/utils/utils.dart';
 abstract class Constants {
   static const appName = "ProxyYou";
   static const allowAppUpdates = false;
-  static const githubUrl = "https://github.com/Lynatick/ProxyYou";
-  static const licenseUrl = "https://github.com/Lynatick/ProxyYou/blob/main/LICENSE.md";
-  static const githubReleasesApiUrl = "https://api.github.com/repos/Lynatick/ProxyYou/releases";
-  static const githubLatestReleaseUrl = "https://github.com/Lynatick/ProxyYou/releases/latest";
-  static const appCastUrl = "https://raw.githubusercontent.com/Lynatick/ProxyYou/main/appcast.xml";
+  static const githubUrl = "https://github.com/Lynatick/proxyyou";
+  static const licenseUrl = "https://github.com/Lynatick/proxyyou/blob/main/LICENSE.md";
+  static const githubReleasesApiUrl = "https://api.github.com/repos/Lynatick/proxyyou/releases";
+  static const githubLatestReleaseUrl = "https://github.com/Lynatick/proxyyou/releases/latest";
+  static const appCastUrl = "https://raw.githubusercontent.com/Lynatick/proxyyou/main/appcast.xml";
   static const telegramChannelUrl = "https://t.me/hiddify";
   static const privacyPolicyUrl = "https://hiddify.com/privacy-policy/";
   static const termsAndConditionsUrl = "https://hiddify.com/terms/";
