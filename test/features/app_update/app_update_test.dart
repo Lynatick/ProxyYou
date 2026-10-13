@@ -87,6 +87,13 @@ void main() {
     expect(GithubReleaseParser.latest(entries, operatingSystem: 'ios')?.version, '4.1.28');
     expect(GithubReleaseParser.latest(entries, operatingSystem: 'windows'), isNull);
   });
+  test('macOS checks offer a package matching the running architecture', () {
+    final arm = release('4.1.20', platform: 'macOS-AppleSilicon', suffix: 'zip');
+    final intel = release('4.1.21', platform: 'macOS-Intel', suffix: 'zip');
+    expect(GithubReleaseParser.latest([intel, arm], operatingSystem: 'macos')?.version, '4.1.20');
+    expect(GithubReleaseParser.latest([intel, arm], operatingSystem: 'macos', macOSIntel: true)?.version, '4.1.21');
+    expect(GithubReleaseParser.latest([arm], operatingSystem: 'macos', macOSIntel: true), isNull);
+  });
   test('concurrent focus events share a request; normal checks reuse cache; manual check refreshes', () async {
     final repo = TestRepository();
     final pending = Completer<Either<AppUpdateFailure, RemoteVersionEntity>>();

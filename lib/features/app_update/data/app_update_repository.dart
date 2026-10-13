@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:fpdart/fpdart.dart';
@@ -39,6 +40,7 @@ class AppUpdateRepositoryImpl with ExceptionHandler, InfraLogger implements AppU
         response.data!,
         operatingSystem: Platform.operatingSystem,
         includePreReleases: includePreReleases,
+        macOSIntel: Platform.isMacOS && Abi.current() == Abi.macosX64,
       );
       if (latest == null) return left(const AppUpdateFailure.unexpected());
       return right(latest);
