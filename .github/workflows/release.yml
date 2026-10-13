@@ -44,7 +44,7 @@ jobs:
       - name: Create draft release
         if: inputs.operation == 'prepare'
         run: |
-          gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --draft --title "PROXYYOU ${RELEASE_TAG#v}" --notes 'Черновик: загрузите проверенные APK, macOS ZIP, Windows Setup EXE и SHA256SUMS.txt. Публикация выполняется workflow Release ProxyYou.'
+          gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --draft --title "PROXYYOU ${RELEASE_TAG#v}" --notes 'Черновик: загрузите проверенные APK, macOS ZIP (Silicon и Intel), Windows Setup EXE и SHA256SUMS.txt. Публикация выполняется workflow Release ProxyYou.'
       - name: Verify and publish existing draft
         if: inputs.operation == 'publish'
         run: |

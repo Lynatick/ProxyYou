@@ -11,6 +11,7 @@ abstract class GithubReleaseParser {
     List<dynamic> releases, {
     required String operatingSystem,
     bool includePreReleases = false,
+    bool macOSIntel = false,
   }) {
     RemoteVersionEntity? latest;
     Version? highest;
@@ -31,7 +32,7 @@ abstract class GithubReleaseParser {
         }
         final pattern = switch (operatingSystem) {
           'android' => 'ProxyYou-Android-${remote.version}.apk',
-          'macos' => 'ProxyYou-macOS-AppleSilicon-${remote.version}.zip',
+          'macos' => 'ProxyYou-macOS-${macOSIntel ? 'Intel' : 'AppleSilicon'}-${remote.version}.zip',
           'windows' => 'ProxyYou-Windows-x64-${remote.version}-Setup.exe',
           'ios' => 'ProxyYou-iOS-${remote.version}.ipa',
           _ => null,

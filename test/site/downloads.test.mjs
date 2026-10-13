@@ -27,8 +27,15 @@ test('foreign repositories, external hosts and insecure protocols are rejected',
 test('zero byte files, malformed responses and wrong architectures are rejected', () => {
   assert.equal(trustedAsset(make(apk.name, { size: 0 })), false);
   assert.throws(() => selectDownloads({}), TypeError);
-  assert.deepEqual(selectDownloads([release([null, make('ProxyYou-Windows-arm64-4.1.18.exe'), make('ProxyYou-macOS-Intel-4.1.18.zip')])]), {});
+  assert.deepEqual(selectDownloads([release([null, make('ProxyYou-Windows-arm64-4.1.18.exe'), make('ProxyYou-macOS-Universal-4.1.18.zip')])]), {});
 });
 test('empty releases produce no download links', () => assert.deepEqual(selectDownloads([]), {}));
 
 test('file version must match its release tag', () => assert.deepEqual(selectDownloads([release([apk], { tag_name: 'v4.1.17' })]), {}));
+
+test('Silicon and Intel macOS packages are independent downloads', () => {
+ const intel = make('ProxyYou-macOS-Intel-4.1.18.zip');
+ const selected = selectDownloads([release([mac, intel])]);
+ assert.equal(selected.macos.asset.name, mac.name);
+ assert.equal(selected.macosIntel.asset.name, intel.name);
+});

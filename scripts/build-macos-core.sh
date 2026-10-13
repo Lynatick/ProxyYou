@@ -11,8 +11,21 @@ if [[ ! -f "$source_dir/v2/config/proxyyou_apps.go" ]]; then
   patch -d "$source_dir" -p1 < "$root/native-patches/macos-app-routing.patch"
 fi
 mkdir -p "$root/hiddify-core/bin"
-export GOOS=darwin GOARCH=arm64 CGO_ENABLED=1
+architecture="${2:-arm64}"
+case "$architecture" in
+  arm64) clang_arch=arm64 ;;
+  amd64) clang_arch=x86_64 ;;
+  *) echo "Architecture must be arm64 or amd64" >&2; exit 1 ;;
+esac
+export GOOS=darwin GOARCH="$architecture" CGO_ENABLED=1
+export CGO_CFLAGS="-arch $clang_arch -mmacosx-version-min=14.0 -O2"
+export CGO_CXXFLAGS="$CGO_CFLAGS"
+export CGO_LDFLAGS="-arch $clang_arch -mmacosx-version-min=14.0 -O2 -lpthread"
 tags=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack,with_dhcp
-go -C "$source_dir" test -tags="$tags" ./v2/config -run TestProxyYouApps -count=1
+if [[ "$(go env GOHOSTARCH)" == "$architecture" ]]; then
+  go -C "$source_dir" test -tags="$tags" ./v2/config -run TestProxyYouApps -count=1
+else
+  go -C "$source_dir" test -c -tags="$tags" ./v2/config -o "$root/hiddify-core/bin/proxyyou-routing-$architecture.test"
+fi
 go -C "$source_dir" build -trimpath -ldflags='-w -s -checklinkname=0 -buildid=' -tags="$tags" \
   -buildmode=c-shared -o "$root/hiddify-core/bin/hiddify-core.dylib" ./platform/desktop

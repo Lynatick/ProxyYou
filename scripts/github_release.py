@@ -48,7 +48,7 @@ def verify_draft():
     refs = api(f"repos/{repo}/git/matching-refs/tags/{tag}")
     if any(r["ref"] == f"refs/tags/{tag}" for r in refs):
         require(api(f"repos/{repo}/commits/{tag}")["sha"] == os.environ["GITHUB_SHA"], "Existing release tag differs from the validated commit")
-    expected = {f"ProxyYou-Android-{v}.apk", f"ProxyYou-macOS-AppleSilicon-{v}.zip", f"ProxyYou-Windows-x64-{v}-Setup.exe"}
+    expected = {f"ProxyYou-Android-{v}.apk", f"ProxyYou-macOS-AppleSilicon-{v}.zip", f"ProxyYou-macOS-Intel-{v}.zip", f"ProxyYou-Windows-x64-{v}-Setup.exe"}
     names = {a["name"] for a in release["assets"]}
     require(expected | {"SHA256SUMS.txt"} <= names, "Missing platform packages or SHA256SUMS.txt")
     with tempfile.TemporaryDirectory() as tmp:
