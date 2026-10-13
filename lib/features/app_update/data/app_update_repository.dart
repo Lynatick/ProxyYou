@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/core/model/constants.dart';
@@ -29,19 +31,16 @@ class AppUpdateRepositoryImpl with ExceptionHandler, InfraLogger implements AppU
       if (!release.allowCustomUpdateChecker) {
         throw Exception("custom update checkers are not supported");
       }
-      final response = await httpClient.get<List>(Constants.githubReleasesApiUrl);
+      final response = await httpClient.get<List>('${Constants.githubReleasesApiUrl}?per_page=30');
       if (response.statusCode != 200 || response.data == null) {
-        loggy.warning("failed to fetch latest version info");
         return left(const AppUpdateFailure.unexpected());
       }
-
-      final releases = response.data!.map((e) => GithubReleaseParser.parse(e as Map<String, dynamic>));
-      late RemoteVersionEntity latest;
-      if (includePreReleases) {
-        latest = releases.first;
-      } else {
-        latest = releases.firstWhere((e) => e.preRelease == false);
-      }
+      final latest = GithubReleaseParser.latest(
+        response.data!,
+        operatingSystem: Platform.operatingSystem,
+        includePreReleases: includePreReleases,
+      );
+      if (latest == null) return left(const AppUpdateFailure.unexpected());
       return right(latest);
     }, AppUpdateFailure.unexpected);
   }

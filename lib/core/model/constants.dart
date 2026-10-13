@@ -5,6 +5,8 @@ import 'package:hiddify/utils/utils.dart';
 abstract class Constants {
   static const appName = "ProxyYou";
   static const allowAppUpdates = false;
+  static const allowUpdateNotifications = true;
+  static const downloadPageUrl = "https://lynatick.github.io/proxyyou/";
   static const githubUrl = "https://github.com/lynatick/proxyyou";
   static const licenseUrl = "https://github.com/lynatick/proxyyou/blob/main/LICENSE.md";
   static const githubReleasesApiUrl = "https://api.github.com/repos/lynatick/proxyyou/releases";

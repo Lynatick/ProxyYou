@@ -108,7 +108,7 @@ class AddProfileManual extends HookConsumerWidget {
     final formKey = useMemoized(() => GlobalKey<FormState>());
     final nameTextController = useTextEditingController();
     final urlTextController = useTextEditingController();
-    final isAutoUpdateDisable = useState<bool>(false);
+    final isAutoUpdateDisable = useState<bool>(true);
     final updateInterval = useState(.0);
     final sliderFocusNode = useFocusNode(
       onKeyEvent: (node, event) {

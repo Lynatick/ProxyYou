@@ -13,6 +13,15 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'profiles_update_notifier.g.dart';
 
+/// Explicitly disabled or unspecified refresh never becomes enabled merely
+/// because a subscription server sends an interval header.
+bool profileUpdateDue(RemoteProfileEntity profile, DateTime now, {bool force = false}) {
+  if (force) return true;
+  if (profile.userOverride?.isAutoUpdateDisable ?? true) return false;
+  final interval = profile.options?.updateInterval;
+  return interval != null && interval > Duration.zero && interval <= now.difference(profile.lastUpdate);
+}
+
 typedef ProfileUpdateStatus = ({String name, bool success});
 
 @Riverpod(keepAlive: true)
@@ -56,8 +65,15 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
     await _scheduler?.trigger();
   }
 
+  Future<void>? _updateInFlight;
+
   @visibleForTesting
-  Future<void> updateProfiles() async {
+  Future<void> updateProfiles() {
+    if (_updateInFlight case final running?) return running;
+    return _updateInFlight = _updateProfiles().whenComplete(() => _updateInFlight = null);
+  }
+
+  Future<void> _updateProfiles() async {
     var force = false;
     if (_forceNextRun) {
       force = true;
@@ -85,17 +101,9 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
           )
           .first;
 
-      final toUpdate = remoteProfiles.where((profile) {
-        final updateInterval = profile.options?.updateInterval;
-        final shouldUpdate =
-            force || updateInterval != null && updateInterval <= DateTime.now().difference(profile.lastUpdate);
-        if (!shouldUpdate) {
-          loggy.debug(
-            "skipping profile [${profile.id}] update. last successful update: [${profile.lastUpdate}] - interval: [${profile.options?.updateInterval}]",
-          );
-        }
-        return shouldUpdate;
-      }).toList();
+      final now = DateTime.now();
+      final toUpdate = remoteProfiles.where((profile) => profileUpdateDue(profile, now, force: force)).toList();
+      loggy.debug('checking ${remoteProfiles.length} subscriptions; updating ${toUpdate.length}');
 
       var successCount = 0;
       final failedNames = <String>[];

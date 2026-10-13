@@ -49,3 +49,7 @@ Android сейчас собран с тестовым Android Debug сертиф
 - [Android: подпись приложения](https://developer.android.com/studio/publish/app-signing)
 - [Android: PackageInstaller](https://developer.android.com/reference/android/content/pm/PackageInstaller)
 - [Inno Setup: параметры установки](https://jrsoftware.org/ishelp/topic_setupcmdline.htm)
+
+## Уведомления начиная с 4.1.19
+
+`allowUpdateNotifications = true`: фоновая проверка релизов GitHub при запуске, возвращении к приложению и периодически в активном приложении. Успешный результат кешируется на 6 часов, после ошибки повтор допускается через 15 минут; параллельные обращения объединяются. Ручная проверка в «О приложении» обходится без кеша. Баннер на главной появляется только для более новой стабильной версии с пакетом текущей платформы. Автоматической установки нет: `allowAppUpdates = false`.

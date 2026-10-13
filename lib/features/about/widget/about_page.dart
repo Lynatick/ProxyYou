@@ -39,7 +39,7 @@ class AboutPage extends HookConsumerWidget {
     });
 
     final conditionalTiles = [
-      if (Constants.allowAppUpdates && appInfo.release.allowCustomUpdateChecker)
+      if (Constants.allowUpdateNotifications)
         ListTile(
           title: Text(t.pages.about.checkForUpdate),
           trailing: switch (appUpdate) {
@@ -47,7 +47,7 @@ class AboutPage extends HookConsumerWidget {
             _ => const Icon(FluentIcons.arrow_sync_24_regular),
           },
           onTap: () async {
-            await ref.read(appUpdateNotifierProvider.notifier).check();
+            await ref.read(appUpdateNotifierProvider.notifier).check(force: true);
           },
         ),
       if (PlatformUtils.isDesktop)

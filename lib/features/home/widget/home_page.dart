@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/features/app_based_routing/application_routing_page.dart';
+import 'package:hiddify/features/app_update/widget/app_update_card.dart';
 import 'package:hiddify/features/home/widget/connection_controls.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/profile/notifier/profiles_update_notifier.dart';
@@ -59,6 +60,7 @@ class HomePage extends ConsumerWidget {
                   : 20,
             ),
             children: [
+              const AppUpdateCard(),
               if (profile != null) ProfileTile(profile: profile, isMain: true),
               if (profile != null) const SizedBox(height: 16),
               const ConnectionControls(),

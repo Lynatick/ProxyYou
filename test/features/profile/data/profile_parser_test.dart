@@ -23,7 +23,7 @@ Either<ProfileFailure, ProfileEntity> parseRemoteWithHeaders(
         name: '',
         url: url,
         lastUpdate: DateTime.now(),
-        userOverride: userOverride,
+        userOverride: userOverride ?? const UserOverride(isAutoUpdateDisable: false),
         populatedHeaders: headers,
       ),
     ),
@@ -130,6 +130,7 @@ void main() {
             url: validExtendedUrl,
             lastUpdate: DateTime.now(),
             populatedHeaders: r,
+            userOverride: const UserOverride(isAutoUpdateDisable: false),
           ),
         );
         expect(profile.isRight(), true);
@@ -182,6 +183,7 @@ void main() {
             url: validBaseUrl,
             lastUpdate: DateTime.now(),
             populatedHeaders: r,
+            userOverride: const UserOverride(isAutoUpdateDisable: false),
           ),
         );
         expect(profile.isRight(), true);
@@ -223,6 +225,7 @@ void main() {
             url: validBaseUrl,
             lastUpdate: DateTime.now(),
             populatedHeaders: r,
+            userOverride: const UserOverride(isAutoUpdateDisable: false),
           ),
         );
         expect(profile.isRight(), true);
@@ -246,7 +249,10 @@ void main() {
 
   group("content-disposition (#6)", () {
     test("reads the quoted ASCII form", () {
-      expect(ProfileParser.filenameFromContentDisposition('attachment; filename="MyProfile.txt"'), equals("MyProfile.txt"));
+      expect(
+        ProfileParser.filenameFromContentDisposition('attachment; filename="MyProfile.txt"'),
+        equals("MyProfile.txt"),
+      );
     });
 
     test("decodes the RFC 5987 extended form (non-ASCII)", () {
@@ -407,20 +413,18 @@ void main() {
 
     test("whitespace content-disposition falls through to the url fragment", () {
       expectRemote(
-        parseRemoteWithHeaders(
-          {"content-disposition": whitespaceContentDisposition},
-          url: "https://example.com/config#RealName",
-        ),
+        parseRemoteWithHeaders({
+          "content-disposition": whitespaceContentDisposition,
+        }, url: "https://example.com/config#RealName"),
         (rp) => expect(rp.name, equals("RealName")),
       );
     });
 
     test("whitespace content-disposition falls through to the url filename", () {
       expectRemote(
-        parseRemoteWithHeaders(
-          {"content-disposition": whitespaceContentDisposition},
-          url: "https://example.com/myconfig.json",
-        ),
+        parseRemoteWithHeaders({
+          "content-disposition": whitespaceContentDisposition,
+        }, url: "https://example.com/myconfig.json"),
         (rp) => expect(rp.name, equals("myconfig")),
       );
     });
@@ -559,10 +563,8 @@ void main() {
   });
 
   group("populateHeaders - fragment/extra-security intake", () {
-    Map<String, dynamic> populate(Map<String, dynamic> remoteHeaders) => ProfileParser.populateHeaders(
-      content: '',
-      remoteHeaders: remoteHeaders,
-    ).getOrElse((_) => <String, dynamic>{});
+    Map<String, dynamic> populate(Map<String, dynamic> remoteHeaders) =>
+        ProfileParser.populateHeaders(content: '', remoteHeaders: remoteHeaders).getOrElse((_) => <String, dynamic>{});
 
     test("empty fragment header is dropped", () {
       expect(populate({"fragment": ""}).containsKey("fragment"), isFalse);

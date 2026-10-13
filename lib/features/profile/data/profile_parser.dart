@@ -393,7 +393,7 @@ class ProfileParser {
           }
         }
 
-        final isAutoUpdateDisable = profile.userOverride?.isAutoUpdateDisable ?? false;
+        final isAutoUpdateDisable = profile.userOverride?.isAutoUpdateDisable ?? true;
         ProfileOptions? options;
         if (profile.userOverride?.updateInterval case final int updateInterval
             when updateInterval > 0 && !isAutoUpdateDisable) {
