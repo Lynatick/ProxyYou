@@ -28,6 +28,16 @@ class ProfileDetailsNotifier extends _$ProfileDetailsNotifier with AppLogger {
       }
       return prof;
     });
+    // Subscription details are metadata only. Avoid loading and generating
+    // thousands of server configurations merely to edit a name or interval.
+    if (prof is RemoteProfileEntity) {
+      return ProfileDetailsState(
+        loadingState: const AsyncData(null),
+        profile: prof,
+        configContent: "",
+        isDetailsChanged: false,
+      );
+    }
     var profContent = "";
     try {
       profContent = (await _profilesRepo.generateConfig(id).run()).match(
@@ -57,7 +67,7 @@ class ProfileDetailsNotifier extends _$ProfileDetailsNotifier with AppLogger {
       // ignore: avoid_dynamic_calls
       final endpoints = jsonObject['endpoints'] as List? ?? [];
       profContent = '{"outbounds": ${json.encode(outbounds)},"endpoints":${json.encode(endpoints)} }';
-      loggy.info(profContent);
+      loggy.debug("loaded local profile: ${outbounds.length} outbounds, ${endpoints.length} endpoints");
     } catch (e, st) {
       loggy.error('Error parsing profile-content JSON', e, st);
       // rethrow;
@@ -73,9 +83,11 @@ class ProfileDetailsNotifier extends _$ProfileDetailsNotifier with AppLogger {
   Future<T?> doAsync<T>(Future<T> Function() operation) async {
     if (state case AsyncData(value: final ProfileDetailsState data)) {
       state = AsyncData(data.copyWith(loadingState: const AsyncLoading()));
-      final T? result = await operation();
-      state = AsyncData(data.copyWith(loadingState: const AsyncData(null)));
-      return result;
+      try {
+        return await operation();
+      } finally {
+        state = AsyncData(data.copyWith(loadingState: const AsyncData(null)));
+      }
     }
     return null;
   }
@@ -102,7 +114,12 @@ class ProfileDetailsNotifier extends _$ProfileDetailsNotifier with AppLogger {
       success =
           await doAsync<bool>(() async {
             final t = await ref.read(translationsProvider.future);
-            return (await _profilesRepo.offlineUpdate(value.profile, value.configContent).run()).match(
+            final update = value.profile is RemoteProfileEntity
+                ? _profilesRepo
+                      .getRawConfig(value.profile.id)
+                      .flatMap((content) => _profilesRepo.offlineUpdate(value.profile, content))
+                : _profilesRepo.offlineUpdate(value.profile, value.configContent);
+            return (await update.run()).match(
               (l) async {
                 await ref
                     .read(dialogNotifierProvider.notifier)

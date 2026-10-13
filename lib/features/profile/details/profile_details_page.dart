@@ -9,7 +9,6 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/model/failures.dart';
-import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/features/profile/details/json_editor.dart';
 import 'package:hiddify/features/profile/details/profile_details_notifier.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
@@ -68,9 +67,6 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
                         : () async {
                             if (formKey.currentState!.validate()) {
                               await ref.read(provider.notifier).save().then((success) {
-                                ref
-                                    .read(inAppNotificationControllerProvider)
-                                    .showSuccessToast(t.pages.profiles.msg.save.success);
                                 if (success && context.mounted) context.pop();
                               });
                             }
@@ -247,36 +243,37 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
                       ],
                     ),
                   ),
-                  SizedBox(
-                    height: MediaQuery.of(context).size.height * 0.7,
-                    child: isJson(data.configContent)
-                        ? JsonEditor(
-                            expandedObjects: const ["outbounds", "endpoints"],
-                            onChanged: (value) {
-                              if (value == null) return;
-                              try {
-                                const encoder = JsonEncoder.withIndent('  ');
-                                ref.read(provider.notifier).setContent(encoder.convert(value));
-                              } catch (e) {
-                                ref.read(provider.notifier).setContent("$value");
-                              }
-                            },
-                            enableHorizontalScroll: true,
-                            json: data.configContent,
-                          )
-                        : TextFormField(
-                            onChanged: (value) {
-                              ref.read(provider.notifier).setContent(value);
-                            },
-                            maxLines: null,
-                            expands: true,
-                            textAlignVertical: TextAlignVertical.top,
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.only(left: 5, top: 8, bottom: 8),
+                  if (data.profile is LocalProfileEntity)
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.7,
+                      child: isJson(data.configContent)
+                          ? JsonEditor(
+                              expandedObjects: const ["outbounds", "endpoints"],
+                              onChanged: (value) {
+                                if (value == null) return;
+                                try {
+                                  const encoder = JsonEncoder.withIndent('  ');
+                                  ref.read(provider.notifier).setContent(encoder.convert(value));
+                                } catch (e) {
+                                  ref.read(provider.notifier).setContent("$value");
+                                }
+                              },
+                              enableHorizontalScroll: true,
+                              json: data.configContent,
+                            )
+                          : TextFormField(
+                              onChanged: (value) {
+                                ref.read(provider.notifier).setContent(value);
+                              },
+                              maxLines: null,
+                              expands: true,
+                              textAlignVertical: TextAlignVertical.top,
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.only(left: 5, top: 8, bottom: 8),
+                              ),
                             ),
-                          ),
-                  ),
+                    ),
                 ],
               ),
             );

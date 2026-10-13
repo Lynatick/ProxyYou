@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:accessibility_tools/accessibility_tools.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/foundation.dart';
@@ -14,6 +16,7 @@ import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.
 import 'package:hiddify/core/theme/app_theme.dart';
 import 'package:hiddify/core/theme/theme_preferences.dart';
 import 'package:hiddify/features/app_based_routing/overview/app_based_routing_notifier.dart';
+import 'package:hiddify/features/app_update/notifier/app_update_notifier.dart';
 import 'package:hiddify/features/connection/widget/connection_wrapper.dart';
 import 'package:hiddify/features/profile/notifier/profiles_update_notifier.dart';
 import 'package:hiddify/features/shortcut/shortcut_wrapper.dart';
@@ -43,6 +46,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
   }
 
   void onResume(WidgetRef ref) {
+    unawaited(ref.read(appUpdateNotifierProvider.notifier).check());
     ref.read(hiddifyCoreServiceProvider).init();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -54,6 +58,17 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     setupStateListener(ref);
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) unawaited(ref.read(appUpdateNotifierProvider.notifier).check());
+      });
+      final timer = Timer.periodic(AppUpdateNotifier.retryInterval, (_) {
+        if (context.mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+          unawaited(ref.read(appUpdateNotifierProvider.notifier).check());
+        }
+      });
+      return timer.cancel;
+    }, const []);
     final router = ref.watch(goRouterNotiferProvider);
     final locale = ref.watch(localePreferencesProvider);
     final themeMode = ref.watch(themePreferencesProvider);
