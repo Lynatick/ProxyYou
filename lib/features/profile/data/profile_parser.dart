@@ -9,6 +9,7 @@ import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
 import 'package:hiddify/core/model/optional_range.dart';
 import 'package:hiddify/features/profile/data/profile_data_mapper.dart';
+import 'package:hiddify/features/profile/data/subscription_fingerprint.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/model/profile_failure.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -51,6 +52,9 @@ class ProfileParser {
     'extra-security',
   ];
   static const allowedProfileHeaders = [
+    subscriptionSourceHash,
+    'etag',
+    'last-modified',
     'profile-title',
     'content-disposition',
     'subscription-userinfo',
@@ -180,6 +184,7 @@ class ProfileParser {
           }
           throw err;
         });
+    final sourceHash = await subscriptionFingerprint(tempFilePath);
     await expandRemoteLinesInParallel(
       tempFilePath: tempFilePath,
       httpClient: _httpClient,
@@ -187,10 +192,12 @@ class ProfileParser {
       ref: _ref,
     );
     // fixing headers before return
-    return rs.headers.map.map((key, value) {
+    final headers = rs.headers.map.map((key, value) {
       if (value.length == 1) return MapEntry(key, value.first);
       return MapEntry(key, value);
     });
+    headers[subscriptionSourceHash] = sourceHash;
+    return headers;
   }, (err, st) => err is ProfileFailure ? err : ProfileFailure.unexpected(err, st));
   Future<void> expandRemoteLinesInParallel({
     required String tempFilePath,

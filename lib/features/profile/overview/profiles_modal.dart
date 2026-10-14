@@ -4,9 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
-import 'package:hiddify/features/profile/notifier/profiles_update_notifier.dart';
 import 'package:hiddify/features/profile/overview/profiles_notifier.dart';
 import 'package:hiddify/features/profile/widget/profile_tile.dart';
+import 'package:hiddify/features/profile/widget/subscription_update_button.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -59,15 +59,7 @@ class ProfilesModal extends HookConsumerWidget {
                           icon: const Icon(Icons.sort_rounded),
                           onPressed: () => ref.read(dialogNotifierProvider.notifier).showSortProfiles(),
                         ),
-                        FilledButton.icon(
-                          label: Text(
-                            t.pages.profiles.updateSubscriptions,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          icon: const Icon(Icons.sync_rounded),
-                          onPressed: () => ref.read(foregroundProfilesUpdateNotifierProvider.notifier).trigger(),
-                        ),
+                        const SubscriptionUpdateButton(extended: true),
                       ],
                     ),
                   ),

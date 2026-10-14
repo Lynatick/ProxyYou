@@ -8,10 +8,12 @@ import 'package:hiddify/features/youtube/youtube_probe.dart';
 const fixture = 'test/features/youtube/fixtures/localhost';
 
 void main() {
-  test('production preliminary checks use only YouTube generate_204', () {
-    expect(YoutubeProbe.targets, hasLength(1));
-    expect(YoutubeProbe.targets.single.url, 'https://www.youtube.com/generate_204');
-    expect(YoutubeProbe.targets.single.expectedStatus, 204);
+  test('YouTube and thumbnail timings use separate HTTPS targets', () {
+    expect(YoutubeProbe.targets, hasLength(2));
+    expect(YoutubeProbe.targets.first.url, 'https://www.youtube.com/generate_204');
+    expect(YoutubeProbe.targets.first.expectedStatus, 204);
+    expect(YoutubeProbe.targets.last.jpeg, isTrue);
+    expect(Uri.parse(YoutubeProbe.targets.last.url).host, 'i.ytimg.com');
   });
 
   late HttpServer origin;

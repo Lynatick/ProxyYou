@@ -111,6 +111,9 @@ class DioHttpClient with InfraLogger {
     String? userAgent,
     ({String username, String password})? credentials,
     bool proxyOnly = false,
+    Map<String, String>? headers,
+    bool acceptNotModified = false,
+    int? maxBytes,
   }) async {
     final mode = proxyOnly
         ? "proxy"
@@ -118,11 +121,19 @@ class DioHttpClient with InfraLogger {
         ? "both"
         : "direct";
     final dio = _dio[mode]!;
+    final options = _options(url, userAgent: userAgent, credentials: credentials);
+    options.headers?.addAll(headers ?? const {});
+    if (acceptNotModified) options.validateStatus = (status) => status == 200 || status == 304;
     return dio.download(
       url,
       path,
       cancelToken: cancelToken,
-      options: _options(url, userAgent: userAgent, credentials: credentials),
+      options: options,
+      onReceiveProgress: maxBytes == null
+          ? null
+          : (received, total) {
+              if (received > maxBytes || total > maxBytes) cancelToken?.cancel('Subscription exceeds size limit');
+            },
     );
   }
 

@@ -6,6 +6,7 @@ import 'package:hiddify/core/preferences/preferences_provider.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
+import 'package:hiddify/features/profile/notifier/subscription_updates_notifier.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
 import 'package:meta/meta.dart';
 import 'package:neat_periodic_task/neat_periodic_task.dart';
@@ -74,6 +75,7 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
   }
 
   Future<void> _updateProfiles() async {
+    ref.read(subscriptionsUpdatingProvider.notifier).state = true;
     var force = false;
     if (_forceNextRun) {
       force = true;
@@ -134,6 +136,8 @@ class ForegroundProfilesUpdateNotifier extends _$ForegroundProfilesUpdateNotifie
         }
       }
     } finally {
+      ref.read(subscriptionsUpdatingProvider.notifier).state = false;
+      await ref.read(subscriptionUpdatesProvider.notifier).check();
       await ref.read(sharedPreferencesProvider).requireValue.setString(prefKey, DateTime.now().toIso8601String());
     }
   }
