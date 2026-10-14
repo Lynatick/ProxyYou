@@ -19,6 +19,7 @@ import 'package:hiddify/features/app_based_routing/overview/app_based_routing_no
 import 'package:hiddify/features/app_update/notifier/app_update_notifier.dart';
 import 'package:hiddify/features/connection/widget/connection_wrapper.dart';
 import 'package:hiddify/features/profile/notifier/profiles_update_notifier.dart';
+import 'package:hiddify/features/profile/notifier/subscription_updates_notifier.dart';
 import 'package:hiddify/features/shortcut/shortcut_wrapper.dart';
 import 'package:hiddify/features/system_tray/notifier/system_tray_notifier.dart';
 import 'package:hiddify/features/tv/tv_mode.dart';
@@ -47,6 +48,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
 
   void onResume(WidgetRef ref) {
     unawaited(ref.read(appUpdateNotifierProvider.notifier).check());
+    unawaited(ref.read(subscriptionUpdatesProvider.notifier).check());
     ref.read(hiddifyCoreServiceProvider).init();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -61,10 +63,12 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
     useEffect(() {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) unawaited(ref.read(appUpdateNotifierProvider.notifier).check());
+        unawaited(ref.read(subscriptionUpdatesProvider.notifier).check());
       });
       final timer = Timer.periodic(AppUpdateNotifier.retryInterval, (_) {
         if (context.mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
           unawaited(ref.read(appUpdateNotifierProvider.notifier).check());
+          unawaited(ref.read(subscriptionUpdatesProvider.notifier).check());
         }
       });
       return timer.cancel;

@@ -7,15 +7,12 @@ import 'package:hiddify/core/preferences/general_preferences.dart';
 import 'package:hiddify/core/utils/throttler.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/proxy/data/proxy_data_providers.dart';
-import 'package:hiddify/features/proxy/data/proxy_repository.dart';
 import 'package:hiddify/features/proxy/model/ip_info_entity.dart' as oldipinfo;
 import 'package:hiddify/features/proxy/model/proxy_failure.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
-
 import 'package:hiddify/utils/riverpod_utils.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:rxdart/rxdart.dart';
 
 part 'active_proxy_notifier.g.dart';
 
@@ -28,6 +25,33 @@ OutboundInfo connectedOutbound(List<OutboundGroup> groups) {
   }
   return groups.firstOrNull?.items.firstOrNull ?? OutboundInfo();
 }
+
+// One native stream is shared by the selected server and the routing-mode label.
+final activeProxyGroupsProvider = StreamProvider<List<OutboundGroup>>((ref) {
+  if (!ref.watch(serviceRunningProvider)) return Stream.value(const []);
+  return ref
+      .watch(proxyRepositoryProvider)
+      .watchActiveProxies()
+      .map((event) => event.getOrElse((_) => const <OutboundGroup>[]));
+});
+
+String? connectedRoutingMode(List<OutboundGroup> groups) {
+  // Read the actual main selection, never a server name containing these words.
+  final main = groups.where((group) => group.tag == 'select').firstOrNull;
+  if (main == null) return null;
+  for (final item in main.items) {
+    if (item.isGroup &&
+        (item.tag == main.selected || item.isSelected) &&
+        (item.tag == 'balance' || item.tag == 'lowest')) {
+      return item.tag;
+    }
+  }
+  return null;
+}
+
+final activeRoutingModeProvider = Provider<String?>(
+  (ref) => connectedRoutingMode(ref.watch(activeProxyGroupsProvider).valueOrNull ?? const []),
+);
 
 @riverpod
 class IpInfoNotifier extends _$IpInfoNotifier with AppLogger {
@@ -94,14 +118,21 @@ class ActiveProxyNotifier extends _$ActiveProxyNotifier with AppLogger {
     if (!serviceRunning) {
       return Stream.error(const ServiceNotRunning());
     }
-    return _proxyRepo
-        .watchActiveProxies()
-        .map((event) => event.getOrElse((l) => List<OutboundGroup>.empty()))
-        .map(connectedOutbound)
-        .doOnData((info) => _handleConnectionHaptic(info.urlTestDelay));
+    final controller = StreamController<OutboundInfo>();
+    ref.onDispose(controller.close);
+    ref.listen(activeProxyGroupsProvider, (_, next) {
+      next.when(
+        data: (groups) {
+          final info = connectedOutbound(groups);
+          _handleConnectionHaptic(info.urlTestDelay);
+          controller.add(info);
+        },
+        error: controller.addError,
+        loading: () {},
+      );
+    }, fireImmediately: true);
+    return controller.stream;
   }
-
-  ProxyRepository get _proxyRepo => ref.read(proxyRepositoryProvider);
 
   /// Whether the tunnel currently has a valid ping. Tracked so haptics fire only
   /// on real transitions (connect / timeout / recover), not on every ping update.

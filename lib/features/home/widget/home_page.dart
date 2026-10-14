@@ -4,8 +4,8 @@ import 'package:hiddify/features/app_based_routing/application_routing_page.dart
 import 'package:hiddify/features/app_update/widget/app_update_card.dart';
 import 'package:hiddify/features/home/widget/connection_controls.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
-import 'package:hiddify/features/profile/notifier/profiles_update_notifier.dart';
 import 'package:hiddify/features/profile/widget/profile_tile.dart';
+import 'package:hiddify/features/profile/widget/subscription_update_button.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_card.dart';
 import 'package:hiddify/features/tv/tv_mode.dart';
 import 'package:hiddify/features/youtube/youtube_card.dart';
@@ -36,11 +36,7 @@ class HomePage extends ConsumerWidget {
             onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(),
             icon: const Icon(Icons.add),
           ),
-          IconButton(
-            tooltip: 'Обновить подписки',
-            onPressed: () => ref.read(foregroundProfilesUpdateNotifierProvider.notifier).trigger(),
-            icon: const Icon(Icons.sync),
-          ),
+          const SubscriptionUpdateButton(),
           IconButton(
             tooltip: 'Настройки соединения',
             onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showQuickSettings(),

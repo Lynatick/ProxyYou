@@ -6,9 +6,9 @@ import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
-import 'package:hiddify/features/profile/notifier/profiles_update_notifier.dart';
 import 'package:hiddify/features/profile/overview/profiles_notifier.dart';
 import 'package:hiddify/features/profile/widget/profile_tile.dart';
+import 'package:hiddify/features/profile/widget/subscription_update_button.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class ProfilesPage extends HookConsumerWidget {
@@ -29,11 +29,7 @@ class ProfilesPage extends HookConsumerWidget {
       appBar: AppBar(
         title: Text(t.pages.profiles.title),
         actions: [
-          IconButton(
-            onPressed: () => ref.read(foregroundProfilesUpdateNotifierProvider.notifier).trigger(),
-            icon: const Icon(Icons.sync_rounded),
-            tooltip: t.pages.profiles.updateSubscriptions,
-          ),
+          const SubscriptionUpdateButton(),
           IconButton(
             onPressed: () => ref.read(dialogNotifierProvider.notifier).showSortProfiles(),
             icon: const Icon(Icons.sort_rounded),

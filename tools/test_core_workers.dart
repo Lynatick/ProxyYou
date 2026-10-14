@@ -18,6 +18,7 @@ Future<int> freePort() async {
 
 Future<void> main(List<String> arguments) async {
   final appRouting = arguments.contains('--app-routing');
+  final generatedGroups = appRouting || arguments.contains('--generated-groups');
   final diagnosticPort = appRouting ? await freePort() : 0;
   final library = File(
     Platform.isWindows ? 'hiddify-core/windows-x64/hiddify-core.dll' : 'hiddify-core/bin/hiddify-core.dylib',
@@ -99,7 +100,7 @@ Future<void> main(List<String> arguments) async {
   );
   final core = CoreClient(channel, options: CallOptions(timeout: const Duration(seconds: 20)));
   try {
-    if (appRouting) {
+    if (generatedGroups) {
       final settings = await core.changeHiddifySettings(
         ChangeHiddifySettingsRequest(
           hiddifySettingsJson: jsonEncode({
@@ -110,12 +111,13 @@ Future<void> main(List<String> arguments) async {
             'balancer-strategy': 'round-robin',
             'connection-test-url': 'https://www.youtube.com/generate_204',
             'connection-test-urls': ['https://www.youtube.com/generate_204'],
-            'proxyyou-app-routing': {
-              'enabled': true,
-              'mode': 'include',
-              'bundles': ['/Applications/ProxyYou Test.app'],
-              'diagnostic_port': diagnosticPort,
-            },
+            if (appRouting)
+              'proxyyou-app-routing': {
+                'enabled': true,
+                'mode': 'include',
+                'bundles': ['/Applications/ProxyYou Test.app'],
+                'diagnostic_port': diagnosticPort,
+              },
           }),
         ),
       );
@@ -127,7 +129,7 @@ Future<void> main(List<String> arguments) async {
         {'type': 'mixed', 'tag': 'in', 'listen': '127.0.0.1', 'listen_port': mixedPort},
       ],
       'outbounds': [
-        if (!appRouting)
+        if (!generatedGroups)
           {
             'type': 'selector',
             'tag': 'select',
@@ -149,33 +151,43 @@ Future<void> main(List<String> arguments) async {
       StartRequest(
         configContent: config,
         configName: 'Local concurrency test',
-        enableRawConfig: !appRouting,
+        enableRawConfig: !generatedGroups,
         disableMemoryLimit: true,
       ),
     );
     if (started.messageType != MessageType.EMPTY) throw StateError('start ${started.messageType}');
-    if (appRouting) {
+    if (generatedGroups) {
       final files = await base
           .list(recursive: true)
           .where((file) => file.path.endsWith('current-config.json'))
           .toList();
       final generated = jsonDecode(await File(files.single.path).readAsString()) as Map<String, dynamic>;
-      final inbounds = (generated['inbounds'] as List).cast<Map<String, dynamic>>();
-      final mixed = inbounds.firstWhere((value) => value['listen_port'] == mixedPort)['tag'];
-      final diagnostic = inbounds.firstWhere((value) => value['listen_port'] == diagnosticPort)['tag'];
-      final route = generated['route'] as Map<String, dynamic>;
-      final rules = (route['rules'] as List).cast<Map<String, dynamic>>();
-      if (!(rules[0]['inbound'] as List).contains(mixed) ||
-          (rules[0]['inbound'] as List).contains(diagnostic) ||
-          rules[0]['outbound'] != 'select' ||
-          rules[1]['outbound'] != 'direct §hide§') {
-        throw StateError('application rules do not match actual inbound tags');
+      final automatic = (generated['outbounds'] as List)
+          .cast<Map<String, dynamic>>()
+          .where((out) => ['select', 'balance', 'lowest'].contains(out['tag']))
+          .toList();
+      if (automatic.length != 3 || automatic.any((out) => out['interrupt_exist_connections'] == true)) {
+        throw StateError('Generated automatic groups interrupt client connections');
       }
-      stdout.writeln(
-        'PASS: generated application rules match actual proxy listener; diagnostics use separate listener',
-      );
+      stdout.writeln('PASS: embedded native binary generates select/balance/lowest without client interruption');
+      if (appRouting) {
+        final inbounds = (generated['inbounds'] as List).cast<Map<String, dynamic>>();
+        final mixed = inbounds.firstWhere((value) => value['listen_port'] == mixedPort)['tag'];
+        final diagnostic = inbounds.firstWhere((value) => value['listen_port'] == diagnosticPort)['tag'];
+        final route = generated['route'] as Map<String, dynamic>;
+        final rules = (route['rules'] as List).cast<Map<String, dynamic>>();
+        if (!(rules[0]['inbound'] as List).contains(mixed) ||
+            (rules[0]['inbound'] as List).contains(diagnostic) ||
+            rules[0]['outbound'] != 'select' ||
+            rules[1]['outbound'] != 'direct §hide§') {
+          throw StateError('application rules do not match actual inbound tags');
+        }
+        stdout.writeln(
+          'PASS: generated application rules match actual proxy listener; diagnostics use separate listener',
+        );
+      }
     }
-    if (!appRouting) {
+    if (!generatedGroups) {
       await core.urlTest(UrlTestRequest(tag: 'select'));
       await twenty.future.timeout(const Duration(seconds: 15));
       await Future<void>.delayed(const Duration(seconds: 2));

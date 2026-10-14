@@ -65,7 +65,10 @@ class YoutubeProbe {
   final Set<HttpClient> _clients = {};
   bool _closed = false;
 
-  static const targets = [ProbeTarget('YouTube', 'https://www.youtube.com/generate_204', expectedStatus: 204)];
+  static const targets = [
+    ProbeTarget('YouTube', 'https://www.youtube.com/generate_204', expectedStatus: 204),
+    ProbeTarget('Миниатюры', 'https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg', expectedStatus: 200, jpeg: true),
+  ];
 
   Future<YoutubeReport> check() async => YoutubeReport(await Future.wait(targets.map(checkTarget)));
 

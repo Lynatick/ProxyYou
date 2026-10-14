@@ -10,6 +10,9 @@ fi
 if [[ ! -f "$source_dir/v2/config/proxyyou_apps.go" ]]; then
   patch -d "$source_dir" -p1 < "$root/native-patches/macos-app-routing.patch"
 fi
+if grep -q "InterruptExistConnections: true," "$source_dir/v2/config/builder.go"; then
+  patch -d "$source_dir" -p1 < "$root/native-patches/connection-continuity.patch"
+fi
 mkdir -p "$root/hiddify-core/bin"
 architecture="${2:-arm64}"
 case "$architecture" in
