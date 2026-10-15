@@ -11,7 +11,7 @@ class ActiveProxyFooter extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final running = ref.watch(serviceRunningProvider);
-    final active = ref.watch(activeProxyNotifierProvider).valueOrNull;
+    final active = ref.watch(activeProxyNotifierProvider).value;
     if (!running || active == null) return const SizedBox.shrink();
     return ConnectedConfigurationButton(
       name: active.tagDisplay,

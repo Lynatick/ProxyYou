@@ -25,9 +25,9 @@ class ConnectionButton extends HookConsumerWidget {
     final t = ref.watch(translationsProvider).requireValue;
     final connectionStatus = ref.watch(connectionNotifierProvider);
     final activeProxy = ref.watch(activeProxyNotifierProvider);
-    final delay = activeProxy.valueOrNull?.urlTestDelay ?? 0;
+    final delay = activeProxy.value?.urlTestDelay ?? 0;
 
-    final requiresReconnect = ref.watch(configOptionNotifierProvider).valueOrNull;
+    final requiresReconnect = ref.watch(configOptionNotifierProvider).value;
     final today = DateTime.now();
     // final animationController = useAnimationController(
     //   duration: const Duration(seconds: 1),
@@ -120,7 +120,7 @@ class ConnectionButton extends HookConsumerWidget {
           return await ref.read(connectionNotifierProvider.notifier).reconnect(activeProfile);
         },
         AsyncData(value: Disconnected()) || AsyncError() => () async {
-          if (ref.read(activeProfileProvider).valueOrNull == null) {
+          if (ref.read(activeProfileProvider).value == null) {
             await ref.read(dialogNotifierProvider.notifier).showNoActiveProfile();
             ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile();
           }
@@ -151,7 +151,12 @@ class ConnectionButton extends HookConsumerWidget {
       },
       buttonColor: switch (connectionStatus) {
         AsyncData(value: Connected()) when requiresReconnect == true => Colors.teal,
-        AsyncData(value: Connected()) when !ConnectionConst.isValidDelay(delay) => const Color.fromARGB(255, 185, 176, 103),
+        AsyncData(value: Connected()) when !ConnectionConst.isValidDelay(delay) => const Color.fromARGB(
+          255,
+          185,
+          176,
+          103,
+        ),
         AsyncData(value: Connected()) => buttonTheme.connectedColor!,
         AsyncData(value: _) => buttonTheme.idleColor!,
         _ => Colors.red,
@@ -164,7 +169,12 @@ class ConnectionButton extends HookConsumerWidget {
       },
       newButtonColor: switch (connectionStatus) {
         AsyncData(value: Connected()) when requiresReconnect == true => Colors.teal,
-        AsyncData(value: Connected()) when !ConnectionConst.isValidDelay(delay) => const Color.fromARGB(255, 185, 176, 103),
+        AsyncData(value: Connected()) when !ConnectionConst.isValidDelay(delay) => const Color.fromARGB(
+          255,
+          185,
+          176,
+          103,
+        ),
         AsyncData(value: Connected()) => buttonTheme.connectedColor!,
         AsyncData(value: _) => buttonTheme.idleColor!,
         _ => Colors.red,
@@ -261,13 +271,12 @@ class _ConnectionButton extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     // const Gap(8),
-                    Icon(FontAwesomeIcons.shieldHalved, size: 16, color: Theme.of(context).colorScheme.secondary),
+                    FaIcon(FontAwesomeIcons.shieldHalved, size: 16, color: Theme.of(context).colorScheme.secondary),
                     const Gap(4),
                     Text(
                       secureLabel,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.titleSmall?.copyWith(color: Theme.of(context).colorScheme.secondary),
+                      style: Theme.of(context).textTheme.titleSmall
+                          ?.copyWith(color: Theme.of(context).colorScheme.secondary),
                     ),
                   ],
                 ),

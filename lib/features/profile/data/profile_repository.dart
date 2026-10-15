@@ -39,16 +39,12 @@ abstract interface class ProfileRepository {
 
 class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements ProfileRepository {
   ProfileRepositoryImpl({
-    required ProfileDataSource profileDataSource,
-    required ProfilePathResolver profilePathResolver,
-    required HiddifyCoreService singbox,
+    required this._profileDataSource,
+    required this._profilePathResolver,
+    required this._singbox,
     required ConfigOptionRepository configOptionRepository,
-    required ProfileParser profileParser,
-  }) : _profileParser = profileParser,
-       _configOptionRepo = configOptionRepository,
-       _singbox = singbox,
-       _profilePathResolver = profilePathResolver,
-       _profileDataSource = profileDataSource;
+    required this._profileParser,
+  }) : _configOptionRepo = configOptionRepository;
 
   final ProfileDataSource _profileDataSource;
   final ProfilePathResolver _profilePathResolver;
@@ -145,11 +141,9 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
         try {
           if (profEntity != null && profEntity is RemoteProfileEntity) {
             // Update
-            if (userOverride != null) {
-              profEntity = profEntity.copyWith(userOverride: userOverride);
-            }
+            final remoteProfile = userOverride == null ? profEntity : profEntity.copyWith(userOverride: userOverride);
             return _profileParser
-                .updateRemote(rp: profEntity, tempFilePath: tempFile.path, cancelToken: cancelToken)
+                .updateRemote(rp: remoteProfile, tempFilePath: tempFile.path, cancelToken: cancelToken)
                 .flatMap(
                   (profEntity) =>
                       validateConfig(
@@ -275,8 +269,7 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
 
   @override
   TaskEither<ProfileFailure, String> getRawConfig(String id) {
-    return TaskEither.fromEither(
-      Either.tryCatch(() => _profilePathResolver.file(id), ProfileFailure.unexpected),
-    ).flatMap((configFile) => TaskEither.tryCatch(() => configFile.readAsString(), ProfileFailure.unexpected));
+    return TaskEither.fromEither(Either.tryCatch(() => _profilePathResolver.file(id), ProfileFailure.unexpected))
+        .flatMap((configFile) => TaskEither.tryCatch(() => configFile.readAsString(), ProfileFailure.unexpected));
   }
 }

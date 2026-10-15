@@ -17,8 +17,8 @@ class HomePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(activeProfileProvider).valueOrNull;
-    final isTv = ref.watch(televisionProvider).valueOrNull ?? false;
+    final profile = ref.watch(activeProfileProvider).value;
+    final isTv = ref.watch(televisionProvider).value ?? false;
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(

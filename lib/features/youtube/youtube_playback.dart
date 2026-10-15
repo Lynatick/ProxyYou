@@ -1,11 +1,14 @@
 import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:hiddify/features/app_based_routing/mac_app_preferences.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
+import 'package:hiddify/features/youtube/youtube_test_video.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/legacy.dart';
 
 enum PlaybackStatus { idle, checking, passed, failed, unsupported, cancelled }
 
@@ -23,8 +26,8 @@ final youtubePlaybackProvider = StateNotifierProvider.autoDispose<YoutubePlaybac
   final mixedPort = ref.watch(ConfigOptions.mixedPort);
   final port = ref.watch(macDiagnosticPortProvider) ?? mixedPort;
   ref.watch(connectionNotifierProvider);
-  ref.watch(activeProfileProvider.select((profile) => profile.valueOrNull?.id));
-  ref.watch(activeProxyNotifierProvider.select((proxy) => proxy.valueOrNull?.tag));
+  ref.watch(activeProfileProvider.select((profile) => profile.value?.id));
+  ref.watch(activeProxyNotifierProvider.select((proxy) => proxy.value?.tag));
   return YoutubePlaybackController(port: port, enabled: running && enabled);
 });
 
@@ -38,7 +41,7 @@ class YoutubePlaybackController extends StateNotifier<PlaybackState> {
   bool _disposed = false;
 
   Future<void> start({
-    String videoId = 'jNQXAC9IVRw',
+    String videoId = youtubeTestVideoId,
     Future<Map<String, dynamic>?> Function(Map<String, dynamic>)? playbackRunner,
   }) async {
     if (!enabled || state.status == PlaybackStatus.checking) return;

@@ -79,7 +79,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
       loggy.warning("error selecting outbound", err);
       throw err;
     }).run();
-    final outbounds = state.valueOrNull;
+    final outbounds = state.value;
     if (outbounds == null || outbounds.tag != groupTag) return;
     final newselected = outbounds.items.where((e) => e.tag == outboundTag).firstOrNull;
     if (newselected != null) {

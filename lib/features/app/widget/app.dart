@@ -77,7 +77,7 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
     final locale = ref.watch(localePreferencesProvider);
     final themeMode = ref.watch(themePreferencesProvider);
     final theme = AppTheme(themeMode, locale.preferredFontFamily);
-    final isTv = ref.watch(televisionProvider).valueOrNull ?? false;
+    final isTv = ref.watch(televisionProvider).value ?? false;
     final activeBreakpoint = Breakpoint(context).activeBreakpoint;
 
     ref.listen(foregroundProfilesUpdateNotifierProvider, (_, _) {});
@@ -107,9 +107,9 @@ class App extends HookConsumerWidget with WidgetsBindingObserver, PresLogger {
                   theme: theme.lightTheme(lightColorScheme),
                   darkTheme: theme.darkTheme(darkColorScheme),
                   title: Constants.appName,
-                  builder: (context, child) {
+                  builder: (context, routedChild) {
                     final theme = Theme.of(context);
-                    child ??= const SizedBox();
+                    Widget child = routedChild ?? const SizedBox();
                     if (kDebugMode && _debugAccessibility) {
                       return AccessibilityTools(checkFontOverflows: true, child: child);
                     }

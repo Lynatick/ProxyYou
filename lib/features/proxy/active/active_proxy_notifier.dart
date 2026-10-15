@@ -12,6 +12,7 @@ import 'package:hiddify/features/proxy/model/proxy_failure.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/utils/riverpod_utils.dart';
 import 'package:hiddify/utils/utils.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'active_proxy_notifier.g.dart';
@@ -50,7 +51,7 @@ String? connectedRoutingMode(List<OutboundGroup> groups) {
 }
 
 final activeRoutingModeProvider = Provider<String?>(
-  (ref) => connectedRoutingMode(ref.watch(activeProxyGroupsProvider).valueOrNull ?? const []),
+  (ref) => connectedRoutingMode(ref.watch(activeProxyGroupsProvider).value ?? const []),
 );
 
 @riverpod

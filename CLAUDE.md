@@ -20,7 +20,7 @@ changes take effect only after `dart run slang`.
 
 ## Localization / translations (slang)
 
-The app uses **slang** (v4.8.1) for i18n — a type-safe framework that turns the JSON translation files into Dart code, with tooling for analysis, applying translations, and structural key edits. Config is in `build.yaml` under `slang_build_runner`.
+The app uses **slang** (v4.19.2) for i18n — a type-safe framework that turns the JSON translation files into Dart code, with tooling for analysis, applying translations, and structural key edits. Config is in `slang.yaml`. Run `dart run slang` before `dart run build_runner build` so Riverpod can resolve translation types in a clean checkout.
 
 Project setup:
 - Base locale: `en`. Sources: `assets/translations/<locale>.i18n.json`.

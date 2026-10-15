@@ -15,11 +15,11 @@ sealed class CoreStatus with _$CoreStatus {
   const factory CoreStatus.stopping() = CoreStopping;
 
   factory CoreStatus.fromEvent(dynamic event) {
-    event = event as Map<String, dynamic>?;
-    switch (event?["status"]) {
+    final data = event as Map<String, dynamic>?;
+    switch (data?["status"]) {
       case "Stopped":
-        final alertstr = event?["alert"] as String?;
-        var msgStr = event?["message"] as String?;
+        final alertstr = data?["alert"] as String?;
+        var msgStr = data?["message"] as String?;
         var alert = CoreAlert.values.firstOrNullWhere((e) => alertstr?.toLowerCase() == e.name.toLowerCase());
         if ((alert == null) && (alertstr ?? "") != "") {
           msgStr = ((msgStr ?? "") != "") ? "$alertstr: $msgStr" : alertstr;

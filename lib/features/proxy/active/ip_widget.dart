@@ -153,9 +153,11 @@ const Map<String, OrgIconData> organizationData = {
   "cloudflare": OrgIconData(SimpleIcons.cloudflare, SimpleIconColors.cloudflare),
   "hetzner": OrgIconData(SimpleIcons.hetzner, SimpleIconColors.hetzner),
   "ovh": OrgIconData(SimpleIcons.ovh, SimpleIconColors.ovh),
-  "azure": OrgIconData(SimpleIcons.microsoftazure, SimpleIconColors.microsoftazure),
-  "amazon": OrgIconData(SimpleIcons.amazonaws, SimpleIconColors.amazonaws),
-  "oracle": OrgIconData(SimpleIcons.oracle, SimpleIconColors.oracle),
+  // These brands were removed upstream; use stable platform icons rather than
+  // retaining code points that now refer to unrelated glyphs in the new font.
+  "azure": OrgIconData(Icons.cloud_outlined, Color(0xff0078d4)),
+  "amazon": OrgIconData(Icons.cloud, Color(0xff232f3e)),
+  "oracle": OrgIconData(Icons.storage, Color(0xfff80000)),
   "fastly": OrgIconData(SimpleIcons.fastly, SimpleIconColors.fastly),
   "digitalocean": OrgIconData(SimpleIcons.digitalocean, SimpleIconColors.digitalocean),
   "alibaba": OrgIconData(SimpleIcons.alibabacloud, SimpleIconColors.alibabacloud),

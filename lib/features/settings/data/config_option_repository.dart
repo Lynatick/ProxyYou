@@ -14,6 +14,7 @@ import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hiddify/singbox/model/singbox_config_option.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract class ConfigOptions {
@@ -541,8 +542,7 @@ abstract class ConfigOptions {
 }
 
 class ConfigOptionRepository with ExceptionHandler, InfraLogger {
-  ConfigOptionRepository({required this.preferences, required SingboxConfigOption Function() getConfigOptions})
-    : _getConfigOptions = getConfigOptions;
+  ConfigOptionRepository({required this.preferences, required this._getConfigOptions});
 
   final SharedPreferences preferences;
   final SingboxConfigOption Function() _getConfigOptions;

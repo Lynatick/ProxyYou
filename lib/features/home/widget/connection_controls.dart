@@ -28,9 +28,8 @@ class _ConnectionControlsState extends ConsumerState<ConnectionControls> {
       await repository.urlTest(groupTag).getOrElse((error) => throw error).run();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Не удалось проверить задержки. Повторите после подключения.')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Не удалось проверить задержки. Повторите после подключения.')));
       }
     } finally {
       if (mounted) setState(() => _testing = false);
@@ -39,17 +38,17 @@ class _ConnectionControlsState extends ConsumerState<ConnectionControls> {
 
   @override
   Widget build(BuildContext context) {
-    final profile = ref.watch(activeProfileProvider).valueOrNull;
+    final profile = ref.watch(activeProfileProvider).value;
     final connection = ref.watch(connectionNotifierProvider);
-    final isTv = ref.watch(televisionProvider).valueOrNull ?? false;
+    final isTv = ref.watch(televisionProvider).value ?? false;
     final failed =
         connection.hasError ||
-        switch (connection.valueOrNull) {
+        switch (connection.value) {
           Disconnected(connectionFailure: final _?) => true,
           _ => false,
         };
-    final running = connection.valueOrNull?.isConnected ?? false;
-    final busy = connection.isLoading || (connection.valueOrNull?.isSwitching ?? false);
+    final running = connection.value?.isConnected ?? false;
+    final busy = connection.isLoading || (connection.value?.isSwitching ?? false);
     final buttonColor = busy
         ? null
         : failed
@@ -57,7 +56,7 @@ class _ConnectionControlsState extends ConsumerState<ConnectionControls> {
         : running
         ? const Color(0xFF16803C)
         : null;
-    final active = ref.watch(activeProxyNotifierProvider).valueOrNull;
+    final active = ref.watch(activeProxyNotifierProvider).value;
     final delay = active?.urlTestDelay ?? 0;
     final ping = !running
         ? 'Пинг'

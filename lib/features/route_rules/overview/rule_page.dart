@@ -24,7 +24,7 @@ class RulePage extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = ref.watch(translationsProvider).requireValue;
-    final isRuleEdited = ref.watch(IsRuleEditedProvider(ruleListOrder));
+    final isRuleEdited = ref.watch(isRuleEditedProvider(ruleListOrder));
     return Scaffold(
       appBar: AppBar(
         title: Text(t.pages.settings.routing.routeRule.rule.title),

@@ -70,7 +70,8 @@ get:
 	flutter pub get
 
 gen:
-	dart run build_runner build --delete-conflicting-outputs
+	dart run slang
+	dart run build_runner build
 
 translate:
 	dart run slang
@@ -87,10 +88,10 @@ prepare:
 
 common-prepare:  get gen translate
 windows-prepare: common-prepare windows-libs
-	
+
 ios-prepare: common-prepare ios-libs 
 	cd ios; pod repo update; pod install;echo "done ios prepare"
-	
+
 macos-prepare: common-prepare macos-libs
 linux-prepare: common-prepare linux-amd64-libs
 
@@ -138,9 +139,9 @@ generate_dart_protoc:
 
 .PHONY: protos
 protos: generate_go_protoc generate_kotlin_protos generate_dart_protoc
-	
-	
-	
+
+
+
 
 macos-install-deps:
 	brew install create-dmg tree 
@@ -149,10 +150,12 @@ macos-install-deps:
 
 ios-install-deps: 
 	if [ "$(flutter)" = "true" ]; then \
-		curl -L -o ~/Downloads/flutter_macos_3.19.3-stable.zip https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_3.22.3-stable.zip; \
+		case "$$(uname -m)" in arm64) flutter_arch="_arm64" ;; *) flutter_arch="" ;; esac; \
+		flutter_archive="flutter_macos$${flutter_arch}_$(REQUIRED_VER)-stable.zip"; \
+		curl --fail --location -o "$$HOME/Downloads/$$flutter_archive" "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/$$flutter_archive"; \
 		mkdir -p ~/develop; \
 		cd ~/develop; \
-		unzip ~/Downloads/flutter_macos_3.22.3-stable.zip; \
+		unzip "$$HOME/Downloads/$$flutter_archive"; \
 		export PATH="$$PATH:$$HOME/develop/flutter/bin"; \
 		echo 'export PATH="$$PATH:$$HOME/develop/flutter/bin"' >> ~/.zshrc; \
 		export PATH="$PATH:$HOME/develop/flutter/bin"; \
@@ -166,9 +169,9 @@ ios-install-deps:
 	fi
 	brew install create-dmg tree 
 	npm install -g appdmg
-	
+
 	dart pub global activate fastforge
-	
+
 
 android-install-deps: 
 	dart pub global activate fastforge
@@ -258,7 +261,7 @@ linux-flutter-sync:
 windows-install-deps:
 	dart pub global activate fastforge
 # 	choco install innosetup -y
-	
+
 gen_translations: #generating missing translations using google translate
 	cd .github && bash sync_translate.sh
 	make translate
@@ -447,7 +450,7 @@ DOCKER_CMD := \
 linux-docker-release:	
 	@$(BLUE)Building docker image (Cached)$(DONE)
 	docker build -t $(DOCKER_IMAGE_NAME) -f Dockerfile .
-	
+
 	@$(BLUE)Ensuring cache volumes exist$(DONE)
 	docker volume create $(DOCKER_FLUTTER_VOL) || true
 	docker volume create $(DOCKER_PUB_VOL) || true
@@ -480,7 +483,7 @@ windows-libs:
 	$(MKDIR) $(DESKTOP_OUT) || echo Folder already exists. Skipping...
 	curl -L $(CORE_URL)/$(CORE_NAME)-windows-amd64.tar.gz | tar xz -C $(DESKTOP_OUT)/
 	ls $(DESKTOP_OUT) || dir $(DESKTOP_OUT)/
-	
+
 
 linux-amd64-libs:
 	mkdir -p $(DESKTOP_OUT)
@@ -544,4 +547,4 @@ ios-temp-prepare:
 	flutter build ios-framework
 	cd ios
 	pod install
-	
+

@@ -61,6 +61,8 @@ class YoutubeCard extends ConsumerWidget {
                           Text(
                             value.reachable
                                 ? 'Предварительная проверка сети пройдена'
+                                : value.onlyThumbnailMissing
+                                ? 'Тестовая миниатюра недоступна'
                                 : 'Предварительная проверка сети не пройдена',
                             style: theme.textTheme.titleSmall,
                           ),
@@ -133,6 +135,7 @@ class YoutubeCard extends ConsumerWidget {
 
   String _describe(ProbeResult check) => switch (check.outcome) {
     ProbeOutcome.reachable => '${check.elapsed.inMilliseconds} мс',
+    ProbeOutcome.rejected when check.missingThumbnail => 'тестовая миниатюра не найдена (HTTP 404)',
     ProbeOutcome.rejected => 'HTTP ${check.statusCode}',
     ProbeOutcome.unexpectedResponse => 'неожиданный ответ',
     ProbeOutcome.timeout => 'превышено время ожидания',
