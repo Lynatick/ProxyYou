@@ -40,3 +40,5 @@ jobs:
         run: node --test test/playback/proof.test.cjs
       - name: Download page tests
         run: node --test test/site/downloads.test.mjs
+      - name: Release platform and checksum checks
+        run: python3 -m unittest discover -s test/release -p '*_test.py'
