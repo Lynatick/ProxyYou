@@ -20,6 +20,7 @@ import 'package:hiddify/features/profile/data/atomic_config_writer.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/hiddifycore/core_interface/core_interface_wrapper_stub.dart'
     if (dart.library.io) 'package:hiddify/hiddifycore/core_interface/core_interface_wrapper.dart';
+import 'package:hiddify/hiddifycore/core_interface/mac_core_stop.dart';
 import 'package:hiddify/hiddifycore/core_interface/responsive_core_client.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcommon/common.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
@@ -294,29 +295,30 @@ class HiddifyCoreService with InfraLogger {
   final _macDisconnect = MacDisconnectController();
 
   Future<Either<String, Unit>> _stopMac() async {
+    var stage = 'восстановление сетевых настроек';
+    final elapsed = Stopwatch()..start();
     try {
       await _macDisconnect.run(
         restoreProxy: () => _systemProxy.invokeMethod<void>('restore'),
+        stopTimeout: const Duration(seconds: 13),
         stopCore: () async {
-          final response = await core.bgClient.stop(
-            Empty(),
-            options: CallOptions(timeout: const Duration(seconds: 10)),
+          stage = 'подтверждение остановки ядра';
+          await stopMacCore(
+            requestStop: () => core.bgClient.stop(Empty(), options: CallOptions(timeout: const Duration(seconds: 10))),
+            readFreshStatus: core.readFreshStatus,
+            onRecoveredReply: (error) => loggy.warning('Stop reply lost; fresh core status confirms STOPPED: $error'),
           );
-          if (response.coreState != CoreStates.STOPPED ||
-              (response.messageType != MessageType.EMPTY && response.messageType != MessageType.ALREADY_STOPPED)) {
-            throw StateError(response.message.isEmpty ? 'Ядро не подтвердило остановку.' : response.message);
-          }
         },
       );
       statusController.add(currentState = const CoreStatus.stopped());
       return right(unit);
-    } catch (error) {
-      loggy.error('macOS disconnect failed', error);
+    } catch (error, stack) {
+      loggy.error('macOS disconnect failed at $stage after ${elapsed.elapsedMilliseconds}ms: $error', error, stack);
       // A late status event may still confirm completion. Until then keep the
       // operation retryable instead of leaving the UI in Stopping forever.
       if (currentState is! CoreStopped) statusController.add(currentState = const CoreStatus.started());
       final message = error is PlatformException ? error.message : null;
-      return left(message ?? 'Не удалось завершить отключение. Повторите попытку.');
+      return left(message ?? 'Не удалось завершить отключение: $stage. Повторите попытку.');
     }
   }
 
