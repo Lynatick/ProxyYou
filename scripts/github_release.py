@@ -48,8 +48,14 @@ def verify_draft():
     refs = api(f"repos/{repo}/git/matching-refs/tags/{tag}")
     if any(r["ref"] == f"refs/tags/{tag}" for r in refs):
         require(api(f"repos/{repo}/commits/{tag}")["sha"] == os.environ["GITHUB_SHA"], "Existing release tag differs from the validated commit")
-    expected = {f"ProxyYou-Android-{v}.apk", f"ProxyYou-macOS-AppleSilicon-{v}.zip", f"ProxyYou-macOS-Intel-{v}.zip", f"ProxyYou-Windows-x64-{v}-Setup.exe"}
+    include_macos = os.environ.get("INCLUDE_MACOS", "true")
+    require(include_macos in {"true", "false"}, "INCLUDE_MACOS must be true or false")
+    expected = {f"ProxyYou-Android-{v}.apk", f"ProxyYou-Windows-x64-{v}-Setup.exe"}
+    if include_macos == "true":
+        expected |= {f"ProxyYou-macOS-AppleSilicon-{v}.zip", f"ProxyYou-macOS-Intel-{v}.zip"}
     names = {a["name"] for a in release["assets"]}
+    if include_macos == "false":
+        require(not any(name.startswith("ProxyYou-macOS-") for name in names), "macOS publication is paused: remove macOS assets from this draft")
     require(expected | {"SHA256SUMS.txt"} <= names, "Missing platform packages or SHA256SUMS.txt")
     with tempfile.TemporaryDirectory() as tmp:
         subprocess.run(["gh", "release", "download", tag, "--dir", tmp, "--pattern", "SHA256SUMS.txt"], check=True)
