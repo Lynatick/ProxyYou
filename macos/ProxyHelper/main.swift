@@ -9,7 +9,24 @@ protocol ProxyStore {
 
 enum ProxyFailure: Error { case invalidRequest, unavailable, commitFailed }
 
+// A successful preference commit followed by a failed apply must be retried
+// even when the next transaction sees the already-restored stored values.
+final class ProxyCommitController {
+  private(set) var needsApply = true
+  func finish(changed: Bool, commit: () -> Bool, apply: () -> Bool) throws {
+    if changed {
+      needsApply = true
+      guard commit() else { throw ProxyFailure.commitFailed }
+    }
+    if needsApply {
+      guard apply() else { throw ProxyFailure.commitFailed }
+      needsApply = false
+    }
+  }
+}
+
 final class NetworkProxyStore: ProxyStore {
+  private let commits = ProxyCommitController()
   func transaction(_ change: (inout ProxyConfigurations) throws -> Void) throws {
     guard let prefs = SCPreferencesCreate(nil, "ProxyYou session helper" as CFString, nil)
     else { throw ProxyFailure.unavailable }
@@ -41,9 +58,8 @@ final class NetworkProxyStore: ProxyStore {
       else { throw ProxyFailure.commitFailed }
       changed = true
     }
-    if changed && (!SCPreferencesCommitChanges(prefs) || !SCPreferencesApplyChanges(prefs)) {
-      throw ProxyFailure.commitFailed
-    }
+    try commits.finish(changed: changed,
+      commit: { SCPreferencesCommitChanges(prefs) }, apply: { SCPreferencesApplyChanges(prefs) })
   }
 }
 
@@ -160,6 +176,20 @@ final class MemoryProxyStore: ProxyStore {
 }
 
 func selfTest() throws {
+  let commits = ProxyCommitController()
+  var applyCalls = 0
+  try commits.finish(changed: false, commit: { preconditionFailure("Unnecessary commit") },
+    apply: { applyCalls += 1; return true })
+  do {
+    try commits.finish(changed: true, commit: { true }, apply: { false })
+    preconditionFailure("Failed apply accepted")
+  } catch ProxyFailure.commitFailed {}
+  precondition(commits.needsApply)
+  try commits.finish(changed: false, commit: { preconditionFailure("Repeated commit") },
+    apply: { applyCalls += 1; return true })
+  precondition(!commits.needsApply && applyCalls == 2)
+  try commits.finish(changed: false, commit: { preconditionFailure("Repeated commit") },
+    apply: { preconditionFailure("Unnecessary apply") })
   let store = MemoryProxyStore()
   let original = store.configs
   let session = ProxySession(store: store)
@@ -199,7 +229,7 @@ func selfTest() throws {
     _ = try session.handle(["command": "restore", "backups": session.backups, "port": 12334])
   }
   print(
-    "PASS: enable, repeated port changes, restore, external changes, invalid commands, restore retry after busy store, 20 reconnects"
+    "PASS: enable, repeated port changes, restore, external changes, invalid commands, restore retry after busy store, apply retry after committed restore, 20 reconnects"
   )
 }
 
