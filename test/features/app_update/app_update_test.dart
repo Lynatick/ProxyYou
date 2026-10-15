@@ -5,8 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
+import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/app_info_entity.dart';
+import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/model/environment.dart';
+import 'package:hiddify/core/router/dialog/widgets/new_version_dialog.dart';
 import 'package:hiddify/features/app_update/data/app_update_data_providers.dart';
 import 'package:hiddify/features/app_update/data/app_update_repository.dart';
 import 'package:hiddify/features/app_update/data/github_release_parser.dart';
@@ -17,6 +20,21 @@ import 'package:hiddify/features/app_update/notifier/app_update_state.dart';
 import 'package:hiddify/features/app_update/widget/app_update_card.dart';
 import 'package:hiddify/features/tv/tv_navigation.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:url_launcher_platform_interface/link.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
+
+class RecordingLauncher extends UrlLauncherPlatform {
+  String? launchedUrl;
+  @override
+  LinkDelegate? get linkDelegate => null;
+  @override
+  Future<bool> canLaunch(String url) => Future.value(true);
+  @override
+  Future<bool> launchUrl(String url, LaunchOptions options) {
+    launchedUrl = url;
+    return Future.value(true);
+  }
+}
 
 RemoteVersionEntity version(String value) => RemoteVersionEntity(
   version: value,
@@ -157,6 +175,35 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('tv-focus-ring')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('update actions open the download website instead of the release URL', (tester) async {
+    final launcher = RecordingLauncher();
+    final previous = UrlLauncherPlatform.instance;
+    UrlLauncherPlatform.instance = launcher;
+    addTearDown(() => UrlLauncherPlatform.instance = previous);
+    final translations = (await tester.runAsync(() => AppLocale.ru.build()))!;
+    final info = version('4.1.20');
+    final surfaces = <Widget>[const AppUpdateCard(), NewVersionDialog('4.1.19', info, canIgnore: false)];
+    for (final surface in surfaces) {
+      await tester.pumpWidget(
+        ProviderScope(
+          key: ValueKey(surface.runtimeType),
+          overrides: [
+            appUpdateNotifierProvider.overrideWith(() => TestUpdate(AppUpdateState.available(info))),
+            translationsProvider.overrideWithValue(AsyncData(translations)),
+          ],
+          child: MaterialApp(home: Scaffold(body: surface)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.text(surface is AppUpdateCard ? 'Скачать обновление' : translations.dialogs.newVersion.updateNow),
+      );
+      await tester.pumpAndSettle();
+      expect(launcher.launchedUrl, Constants.downloadPageUrl);
+      expect(launcher.launchedUrl, 'https://lynatick.github.io/proxyyou/');
+      launcher.launchedUrl = null;
+    }
   });
   testWidgets('no banner is shown for unavailable or failed checks', (tester) async {
     await tester.pumpWidget(

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/constants.dart';
@@ -9,7 +7,6 @@ import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/window/notifier/window_notifier.dart';
 import 'package:hiddify/gen/assets.gen.dart';
-import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
 import 'package:hiddify/singbox/model/singbox_config_enum.dart';
 import 'package:hiddify/utils/utils.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -21,37 +18,57 @@ part 'system_tray_notifier.g.dart';
 @Riverpod(keepAlive: true)
 class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogger {
   bool listenerAdded = false;
+  int _updateRevision = 0;
+  Future<void> _pendingUpdate = Future.value();
+  ({String path, bool isTemplate})? _currentIcon;
+
   @override
-  Future<void> build() async {
+  Future<void> build() {
     assert(PlatformUtils.isDesktop);
     if (!listenerAdded) {
       trayManager.addListener(this);
       listenerAdded = true;
+      ref.onDispose(() {
+        trayManager.removeListener(this);
+        listenerAdded = false;
+        _updateRevision++;
+      });
     }
-    await _initializeTray();
-  }
 
-  Future<void> _initializeTray() async {
-    final t = await ref.watch(translationsProvider.future);
-    final urlTestDelay = await ref
-        .watch(activeProxyNotifierProvider.future)
-        .catchError((e) {
-          loggy.warning("error getting active proxy", e);
-          return OutboundInfo(urlTestDelay: 0);
-        })
-        .then((connection) => connection.urlTestDelay);
-    final connection = await ref
-        .watch(connectionNotifierProvider.future)
-        .catchError((e) {
-          loggy.warning("error getting connection status", e);
-          return const ConnectionStatus.disconnected();
-        })
-        .then((connection) => _modifyConnectionStatus(connection, urlTestDelay));
+    // A ping may arrive late or never arrive. The core's connection status is
+    // sufficient to update the icon and keep Disconnect available in the menu.
+    final t = ref.watch(translationsProvider).value;
+    final connectionState = ref.watch(connectionNotifierProvider);
+    final connection = connectionState.hasError
+        ? const ConnectionStatus.disconnected()
+        : connectionState.value ?? const ConnectionStatus.disconnected();
+    final urlTestDelay = ref.watch(activeProxyNotifierProvider).asData?.value.urlTestDelay ?? 0;
     final serviceMode = ref.watch(ConfigOptions.serviceMode);
+    final revision = ++_updateRevision;
+    final icon = (
+      path: _trayIconPath(connection),
+      // macOS templates discard the green pixels of the connected icon.
+      isTemplate: PlatformUtils.isMacOS && !connection.isConnected,
+    );
 
-    await trayManager.setIcon(_trayIconPath(connection), isTemplate: PlatformUtils.isMacOS);
-    if (!PlatformUtils.isLinux) await trayManager.setToolTip(_trayTooltip(connection, urlTestDelay, t));
-    await trayManager.setContextMenu(_trayMenu(connection, serviceMode, t));
+    // Asset loading and native calls are asynchronous. Serialize them so that a
+    // slow update cannot restore an old icon after a quick connect/disconnect.
+    final update = _pendingUpdate.then((_) async {
+      if (revision != _updateRevision) return;
+      if (_currentIcon != icon) {
+        await trayManager.setIcon(icon.path, isTemplate: icon.isTemplate);
+        _currentIcon = icon;
+      }
+      if (revision != _updateRevision || t == null) return;
+      if (!PlatformUtils.isLinux) await trayManager.setToolTip(_trayTooltip(connection, urlTestDelay, t));
+      if (revision != _updateRevision) return;
+      await trayManager.setContextMenu(_trayMenu(connection, serviceMode, t));
+    });
+    // A failed platform call must not prevent subsequent status updates.
+    _pendingUpdate = update.onError((error, stackTrace) {
+      loggy.warning("error updating system tray", error, stackTrace);
+    });
+    return update;
   }
 
   Menu _trayMenu(ConnectionStatus connection, ServiceMode serviceMode, Translations t) => Menu(
@@ -106,21 +123,9 @@ class SystemTrayNotifier extends _$SystemTrayNotifier with TrayListener, AppLogg
 
   String _trayTooltip(ConnectionStatus connection, int urlTestDelay, Translations t) {
     final r = "${Constants.appName} - ${connection.present(t)}";
-    if (connection is Connected) {
-      if (Platform.isMacOS) windowManager.setBadgeLabel("${urlTestDelay}ms");
-      return '$r : ${urlTestDelay}ms"';
-    } else {
-      if (Platform.isMacOS) windowManager.setBadgeLabel("-ms");
-      return r;
-    }
-  }
-
-  ConnectionStatus _modifyConnectionStatus(ConnectionStatus connection, int urlTestDelay) {
-    if (connection is Connected) {
-      return ConnectionConst.isValidDelay(urlTestDelay) ? const Connected() : const Connecting();
-    } else {
-      return connection;
-    }
+    final hasDelay = connection.isConnected && ConnectionConst.isValidDelay(urlTestDelay);
+    if (PlatformUtils.isMacOS) windowManager.setBadgeLabel(hasDelay ? "$urlTestDelay мс" : "");
+    return hasDelay ? '$r: $urlTestDelay мс' : r;
   }
 
   @override

@@ -39,7 +39,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
     final provider = profileDetailsNotifierProvider(id);
 
     return ref
-        .watch(ProfileDetailsNotifierProvider(id))
+        .watch(profileDetailsNotifierProvider(id))
         .when(
           data: (data) {
             final isLoading = data.loadingState is AsyncLoading;
@@ -91,7 +91,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
                             validator: (value) =>
                                 (value?.isEmpty ?? true) ? t.pages.profileDetails.form.emptyName : null,
                             onChanged: (value) => ref
-                                .read(ProfileDetailsNotifierProvider(id).notifier)
+                                .read(profileDetailsNotifierProvider(id).notifier)
                                 .setUserOverride(userOverride.copyWith(name: value)),
                             label: t.common.name,
                             hint: t.pages.profileDetails.form.nameHint,
@@ -126,7 +126,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
                             ),
                             value: userOverride.isAutoUpdateDisable,
                             onChanged: (value) => ref
-                                .read(ProfileDetailsNotifierProvider(id).notifier)
+                                .read(profileDetailsNotifierProvider(id).notifier)
                                 .setUserOverride(userOverride.copyWith(isAutoUpdateDisable: value)),
                           ),
                           AnimatedSize(
@@ -172,7 +172,7 @@ class ProfileDetailsPage extends HookConsumerWidget with PresLogger {
                                           divisions: 96,
                                           label: (userOverride.updateInterval ?? 0).toString(),
                                           onChanged: (double value) => ref
-                                              .read(ProfileDetailsNotifierProvider(id).notifier)
+                                              .read(profileDetailsNotifierProvider(id).notifier)
                                               .setUserOverride(userOverride.copyWith(updateInterval: value.toInt())),
                                         ),
                                       ),

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hiddify/features/youtube/youtube_probe.dart';
+import 'package:hiddify/features/youtube/youtube_test_video.dart';
 
 // Only this test process trusts this fixture. Production uses system TLS roots.
 const fixture = 'test/features/youtube/fixtures/localhost';
@@ -14,6 +15,7 @@ void main() {
     expect(YoutubeProbe.targets.first.expectedStatus, 204);
     expect(YoutubeProbe.targets.last.jpeg, isTrue);
     expect(Uri.parse(YoutubeProbe.targets.last.url).host, 'i.ytimg.com');
+    expect(Uri.parse(YoutubeProbe.targets.last.url).path, '/vi/$youtubeTestVideoId/hqdefault.jpg');
   });
 
   late HttpServer origin;
@@ -150,6 +152,49 @@ void main() {
     final probe = YoutubeProbe(securityContext: trustedContext, proxyPort: proxy.port);
     addTearDown(probe.close);
     expect((await probe.checkTarget(target(status: 200, jpeg: true))).outcome, ProbeOutcome.reachable);
+  });
+
+  test('404 JPEG placeholder identifies a missing thumbnail without proving connectivity failure', () async {
+    responseStatus = 404;
+    responseBody = [0xff, 0xd8, 0xff, 0xe0, 0, 0];
+    contentType = 'image/jpeg';
+    final probe = YoutubeProbe(securityContext: trustedContext, proxyPort: proxy.port);
+    addTearDown(probe.close);
+    final result = await probe.checkTarget(target(status: 200, jpeg: true));
+    expect(result.outcome, ProbeOutcome.rejected);
+    expect(result.missingThumbnail, isTrue);
+    expect(result.reachable, isFalse);
+    final report = YoutubeReport([
+      const ProbeResult(label: 'YouTube', outcome: ProbeOutcome.reachable, elapsed: Duration(milliseconds: 50)),
+      result,
+    ]);
+    expect(report.onlyThumbnailMissing, isTrue);
+    expect(report.reachable, isFalse);
+  });
+
+  test('thumbnail 404 does not hide a separate network failure', () {
+    const missing = ProbeResult(
+      label: 'Миниатюры',
+      outcome: ProbeOutcome.rejected,
+      elapsed: Duration.zero,
+      statusCode: 404,
+      isThumbnail: true,
+    );
+    const failed = ProbeResult(
+      label: 'YouTube',
+      outcome: ProbeOutcome.networkFailure,
+      elapsed: Duration.zero,
+    );
+    expect(YoutubeReport([failed, missing]).onlyThumbnailMissing, isFalse);
+    expect(
+      const ProbeResult(
+        label: 'YouTube',
+        outcome: ProbeOutcome.rejected,
+        elapsed: Duration.zero,
+        statusCode: 404,
+      ).missingThumbnail,
+      isFalse,
+    );
   });
 
   test('large responses are bounded', () async {

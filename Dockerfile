@@ -21,8 +21,11 @@ RUN apt-get update && \
 RUN wget -O /usr/local/bin/appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" && \
     chmod +x /usr/local/bin/appimagetool
 
+COPY pubspec.yaml /tmp/proxyyou-pubspec.yaml
 RUN mkdir -p /root/develop && \
-    git clone https://github.com/flutter/flutter.git -b stable /root/develop/flutter
+    PROXYYOU_FLUTTER_VERSION=$(sed -n '/environment:/,/flutter:/ s/.*flutter:[[:space:]]*//p' /tmp/proxyyou-pubspec.yaml | tr -d " '^\"") && \
+    test -n "$PROXYYOU_FLUTTER_VERSION" && \
+    git clone --depth 1 --branch "$PROXYYOU_FLUTTER_VERSION" https://github.com/flutter/flutter.git /root/develop/flutter
 
 ENV PATH="/root/develop/flutter/bin:/root/.pub-cache/bin:${PATH}"
 

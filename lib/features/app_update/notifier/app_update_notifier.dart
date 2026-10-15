@@ -8,7 +8,6 @@ import 'package:hiddify/features/app_update/model/app_update_failure.dart';
 import 'package:hiddify/features/app_update/model/remote_version_entity.dart';
 import 'package:hiddify/features/app_update/notifier/app_update_state.dart';
 import 'package:hiddify/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:version/version.dart';
@@ -77,7 +76,7 @@ class AppUpdateNotifier extends _$AppUpdateNotifier with AppLogger {
       if (_disposed) return const AppUpdateState.disabled();
       final result = await ref.read(appUpdateRepositoryProvider).getLatestVersion().run();
       if (_disposed) return const AppUpdateState.disabled();
-      return result.match(
+      return result.match<AppUpdateState>(
         (error) {
           loggy.warning('failed to check application version', error);
           if (state is AppUpdateStateAvailable || state is AppUpdateStateIgnored) return state;

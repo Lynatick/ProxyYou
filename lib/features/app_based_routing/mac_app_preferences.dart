@@ -1,5 +1,5 @@
 import 'package:hiddify/core/utils/preferences_utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/legacy.dart';
 
 final macDiagnosticPortProvider = StateProvider<int?>((ref) => null);
 

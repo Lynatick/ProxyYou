@@ -19,8 +19,8 @@ class AnimatedText extends Text {
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
       duration: duration,
-      transitionBuilder: (child, animation) {
-        child = FadeTransition(opacity: animation, child: child);
+      transitionBuilder: (incomingChild, animation) {
+        Widget child = FadeTransition(opacity: animation, child: incomingChild);
         if (size) {
           child = SizeTransition(
             axis: Axis.horizontal,

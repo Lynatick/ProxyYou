@@ -13,7 +13,7 @@ abstract interface class AutoSelectionRepository {
 }
 
 class AutoSelectionRepositoryImpl with AppLogger implements AutoSelectionRepository {
-  AutoSelectionRepositoryImpl({required Ref ref}) : _ref = ref;
+  AutoSelectionRepositoryImpl({required this._ref});
   final Ref _ref;
   static const _baseUrl = 'https://raw.githubusercontent.com/hiddify/Android-GFW-Apps/refs/heads/master/';
 

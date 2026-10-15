@@ -9,8 +9,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 // Watching the outbound tag, rather than latency, prevents probe loops on each ping.
 final youtubeReportProvider = FutureProvider.autoDispose<YoutubeReport?>((ref) {
   final running = ref.watch(serviceRunningProvider);
-  ref.watch(activeProfileProvider.select((profile) => profile.valueOrNull?.id));
-  ref.watch(activeProxyNotifierProvider.select((proxy) => proxy.valueOrNull?.tag));
+  ref.watch(activeProfileProvider.select((profile) => profile.value?.id));
+  ref.watch(activeProxyNotifierProvider.select((proxy) => proxy.value?.tag));
   final mixedPort = ref.watch(ConfigOptions.mixedPort);
   final port = ref.watch(macDiagnosticPortProvider) ?? mixedPort;
   final enabled = ref.watch(ConfigOptions.enableMixedPort);

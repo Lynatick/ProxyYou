@@ -45,6 +45,9 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   final stopWatch = Stopwatch()..start();
 
   final container = ProviderContainer(
+    // Preserve Riverpod 2 behavior: failed native operations and subscription
+    // requests are retried only by the existing explicit application actions.
+    retry: (retryCount, error) => null,
     overrides: [environmentProvider.overrideWithValue(env)],
     observers: [RiverpodObserver()],
   );
@@ -93,10 +96,7 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   }
   // phase 3 — a log file is worth its cost on desktop, or while debugging.
   // On a phone in release it only burns storage nobody reads.
-  await _init(
-    "logging",
-    () async => logFinish(keepFile: debug || PlatformUtils.isDesktop),
-  );
+  await _init("logging", () async => logFinish(keepFile: debug || PlatformUtils.isDesktop));
 
   // marks where this run begins, since the file now spans several
   logMarkRun(appInfo.format());

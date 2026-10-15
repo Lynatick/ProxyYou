@@ -68,7 +68,7 @@ class ProfileParser {
   final Ref _ref;
   final DioHttpClient _httpClient;
 
-  ProfileParser({required Ref ref, required DioHttpClient httpClient}) : _ref = ref, _httpClient = httpClient;
+  ProfileParser({required this._ref, required this._httpClient});
   TaskEither<ProfileFailure, ProfileEntriesCompanion> addLocal({
     required String id,
     required String content,

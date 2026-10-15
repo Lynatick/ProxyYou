@@ -31,7 +31,7 @@ class ApplicationRoutingPage extends HookConsumerWidget {
     final search = useState('');
     final saving = useState(false);
     final connection = ref.watch(connectionNotifierProvider);
-    final switching = connection.isLoading || (connection.valueOrNull?.isSwitching ?? false);
+    final switching = connection.isLoading || (connection.value?.isSwitching ?? false);
     final serviceMode = ref.watch(ConfigOptions.serviceMode);
     final applications = mac ? ref.watch(macApplicationsProvider) : null;
 
@@ -66,7 +66,7 @@ class ApplicationRoutingPage extends HookConsumerWidget {
           await ref.read(MacAppPreferences.mode.notifier).update(mode.value);
           await ref.read(MacAppPreferences.enabled.notifier).update(enabled.value);
         }
-        if (connection.valueOrNull?.isConnected ?? false) {
+        if (connection.value?.isConnected ?? false) {
           final profile = await ref.read(activeProfileProvider.future);
           if (profile != null) {
             final repository = ref.read(connectionRepositoryProvider);
@@ -90,7 +90,7 @@ class ApplicationRoutingPage extends HookConsumerWidget {
     }
 
     final filtered =
-        applications?.valueOrNull?.where((app) {
+        applications?.value?.where((app) {
           final query = search.value.toLowerCase();
           return '${app['name']} ${app['path']}'.toLowerCase().contains(query);
         }).toList() ??
@@ -110,7 +110,7 @@ class ApplicationRoutingPage extends HookConsumerWidget {
                 ),
                 if (serviceMode != (mac ? ServiceMode.systemProxy : ServiceMode.tun))
                   TextButton.icon(
-                    onPressed: switching || (connection.valueOrNull?.isConnected ?? false)
+                    onPressed: switching || (connection.value?.isConnected ?? false)
                         ? null
                         : () => ref
                               .read(ConfigOptions.serviceMode.notifier)

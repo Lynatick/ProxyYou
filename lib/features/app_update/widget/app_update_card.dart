@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/features/app_update/notifier/app_update_notifier.dart';
 import 'package:hiddify/features/app_update/notifier/app_update_state.dart';
 import 'package:hiddify/utils/uri_utils.dart';
@@ -44,11 +45,10 @@ class AppUpdateCard extends ConsumerWidget {
                 icon: const Icon(Icons.download),
                 label: const Text('Скачать обновление'),
                 onPressed: () async {
-                  final launched = await UriUtils.tryLaunch(Uri.parse(version.url));
+                  final launched = await UriUtils.tryLaunch(Uri.parse(Constants.downloadPageUrl));
                   if (!launched && context.mounted) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text('Не удалось открыть страницу загрузки')));
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(const SnackBar(content: Text('Не удалось открыть страницу загрузки')));
                   }
                 },
               ),

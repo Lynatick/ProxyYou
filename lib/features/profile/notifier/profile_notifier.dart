@@ -19,7 +19,6 @@ import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/utils/riverpod_utils.dart';
 import 'package:hiddify/utils/utils.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'profile_notifier.g.dart';
@@ -37,6 +36,9 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
       final t = ref.read(translationsProvider).requireValue;
       final notification = ref.read(inAppNotificationControllerProvider);
       switch (next) {
+        case AsyncLoading():
+        case AsyncData(value: null):
+          break;
         case AsyncData(value: final _?):
           notification.showSuccessToast(t.pages.profiles.msg.save.success);
         case AsyncError(:final error):

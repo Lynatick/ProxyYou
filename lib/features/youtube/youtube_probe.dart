@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:hiddify/features/youtube/youtube_test_video.dart';
+
 /// Checks origin connectivity through the core's HTTP CONNECT inbound.
 /// A successful probe does not certify that a particular video can be played.
 enum ProbeOutcome { reachable, rejected, unexpectedResponse, timeout, tlsFailure, networkFailure }
@@ -29,13 +31,16 @@ class ProbeResult {
     required this.elapsed,
     this.statusCode,
     this.tlsReason,
+    this.isThumbnail = false,
   });
   final String label;
   final ProbeOutcome outcome;
   final Duration elapsed;
   final int? statusCode;
   final TlsFailureReason? tlsReason;
+  final bool isThumbnail;
   bool get reachable => outcome == ProbeOutcome.reachable;
+  bool get missingThumbnail => isThumbnail && outcome == ProbeOutcome.rejected && statusCode == 404;
 }
 
 class YoutubeReport {
@@ -43,6 +48,9 @@ class YoutubeReport {
   final List<ProbeResult> checks;
   final DateTime checkedAt;
   bool get reachable => checks.isNotEmpty && checks.every((check) => check.reachable);
+  bool get onlyThumbnailMissing =>
+      checks.any((check) => check.missingThumbnail) &&
+      checks.every((check) => check.reachable || check.missingThumbnail);
 }
 
 class ProbeTarget {
@@ -67,7 +75,7 @@ class YoutubeProbe {
 
   static const targets = [
     ProbeTarget('YouTube', 'https://www.youtube.com/generate_204', expectedStatus: 204),
-    ProbeTarget('Миниатюры', 'https://i.ytimg.com/vi/jfKfPfyJRdk/hqdefault.jpg', expectedStatus: 200, jpeg: true),
+    ProbeTarget('Миниатюры', youtubeTestThumbnailUrl, expectedStatus: 200, jpeg: true),
   ];
 
   Future<YoutubeReport> check() async => YoutubeReport(await Future.wait(targets.map(checkTarget)));
@@ -85,8 +93,13 @@ class YoutubeProbe {
       ..findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
     _clients.add(client);
     int? status;
-    ProbeResult result(ProbeOutcome outcome) =>
-        ProbeResult(label: target.label, outcome: outcome, elapsed: clock.elapsed, statusCode: status);
+    ProbeResult result(ProbeOutcome outcome) => ProbeResult(
+      label: target.label,
+      outcome: outcome,
+      elapsed: clock.elapsed,
+      statusCode: status,
+      isThumbnail: target.jpeg,
+    );
     try {
       return await (() async {
         final request = await client.getUrl(uri);
@@ -122,6 +135,7 @@ class YoutubeProbe {
         outcome: ProbeOutcome.tlsFailure,
         elapsed: clock.elapsed,
         tlsReason: classifyTlsFailure(error.toString()),
+        isThumbnail: target.jpeg,
       );
     } on IOException {
       return result(ProbeOutcome.networkFailure);

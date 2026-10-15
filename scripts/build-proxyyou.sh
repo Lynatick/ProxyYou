@@ -12,9 +12,10 @@ case "$platform" in
     archive="hiddify-lib-macos.tar.gz"; destination="hiddify-core/bin" ;;
   *) echo "Usage: scripts/build-proxyyou.sh android|macos" >&2; exit 2 ;;
 esac
-command -v flutter >/dev/null || { echo "Требуется Flutter 3.38.5 в PATH." >&2; exit 1; }
+required_flutter="$(sed -n '/environment:/,/flutter:/ s/.*flutter:[[:space:]]*//p' pubspec.yaml | tr -d " '^\"")"
+command -v flutter >/dev/null || { echo "Требуется Flutter ${required_flutter} в PATH." >&2; exit 1; }
 flutter_version="$(flutter --version)"
-[[ "$flutter_version" == *"Flutter 3.38.5 "* ]] || { echo "Требуется Flutter 3.38.5." >&2; exit 1; }
+[[ "$flutter_version" == *"Flutter ${required_flutter} "* ]] || { echo "Требуется Flutter ${required_flutter}." >&2; exit 1; }
 core_version="$(sed -n 's/^core.version=//p' dependencies.properties)"
 mkdir -p "$destination" .build-cache
 curl --fail --location --retry 3 \
@@ -29,8 +30,8 @@ fi
 [[ -n "$expected" && "$actual" == "$expected" ]] || { echo "Неверная контрольная сумма ${archive}." >&2; exit 1; }
 tar -xzf ".build-cache/${archive}" -C "$destination"
 flutter pub get
-dart run build_runner build --delete-conflicting-outputs
 dart run slang
+dart run build_runner build
 scripts/generate-test-certificates.sh
 flutter test test/features/youtube
 node --test test/playback/proof.test.cjs

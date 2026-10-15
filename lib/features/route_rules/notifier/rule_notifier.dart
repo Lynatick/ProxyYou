@@ -59,13 +59,15 @@ enum RuleEnum {
     ruleSet => (value) => isUrl('$value') ? null : t.pages.settings.routing.routeRule.rule.validUrl,
     processName => (value) => isProcessName('$value') ? null : t.pages.settings.routing.routeRule.rule.validProcessName,
     processPath => (value) => isProcessPath('$value') ? null : t.pages.settings.routing.routeRule.rule.validProcessPath,
-    portRange || sourcePortRange =>
-      (value) => isPortOrPortRange('$value') ? null : t.pages.settings.routing.routeRule.rule.validPortRange,
+    portRange || sourcePortRange => (
+      value,
+    ) => isPortOrPortRange('$value') ? null : t.pages.settings.routing.routeRule.rule.validPortRange,
     ipCidr ||
     sourceIpCidr => (value) => isIpCidr('$value') ? null : t.pages.settings.routing.routeRule.rule.validIpCidr,
     domain => (value) => isDomain('$value') ? null : t.pages.settings.routing.routeRule.rule.validDomain,
-    domainSuffix =>
-      (value) => isDomainSuffix('$value') ? null : t.pages.settings.routing.routeRule.rule.validDomainSuffix,
+    domainSuffix => (
+      value,
+    ) => isDomainSuffix('$value') ? null : t.pages.settings.routing.routeRule.rule.validDomainSuffix,
     _ => null,
   };
 }
@@ -111,7 +113,7 @@ class RuleNotifier extends _$RuleNotifier {
 @riverpod
 bool isRuleEdited(Ref ref, int? listOrder) {
   if (listOrder == null) return true;
-  return ref.watch(RuleNotifierProvider(listOrder)) !=
+  return ref.watch(ruleNotifierProvider(listOrder)) !=
       ref.watch(rulesNotifierProvider.select((value) => value.where((rule) => rule.listOrder == listOrder))).first;
 }
 

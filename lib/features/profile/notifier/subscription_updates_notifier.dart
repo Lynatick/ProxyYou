@@ -8,6 +8,7 @@ import 'package:hiddify/features/profile/data/subscription_revision_checker.dart
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/legacy.dart';
 
 final subscriptionProfilesProvider = StreamProvider<List<RemoteProfileEntity>>((ref) async* {
   final repository = await ref.watch(profileRepositoryProvider.future);
@@ -67,7 +68,7 @@ class SubscriptionUpdatesNotifier extends Notifier<SubscriptionUpdatesState> {
   }
 
   Future<void> _check() async {
-    final profiles = ref.read(subscriptionProfilesProvider).valueOrNull;
+    final profiles = ref.read(subscriptionProfilesProvider).value;
     if (profiles == null) return;
     final checker = ref.read(subscriptionRevisionCheckerProvider);
     final available = <String>{
@@ -87,11 +88,7 @@ class SubscriptionUpdatesNotifier extends Notifier<SubscriptionUpdatesState> {
         try {
           final revision = await checker.check(profile, _cancel!);
           if (_disposed) return;
-          final current = ref
-              .read(subscriptionProfilesProvider)
-              .valueOrNull
-              ?.where((p) => p.id == profile.id)
-              .firstOrNull;
+          final current = ref.read(subscriptionProfilesProvider).value?.where((p) => p.id == profile.id).firstOrNull;
           if (current == null || current.url != profile.url) continue;
           // A manual update may finish while this HTTP request is pending.
           final isAvailable = appliedSubscriptionHash(current) != revision.observed && revision.available;
@@ -108,7 +105,7 @@ class SubscriptionUpdatesNotifier extends Notifier<SubscriptionUpdatesState> {
       }
     } finally {
       if (!_disposed) {
-        final current = ref.read(subscriptionProfilesProvider).valueOrNull ?? const <RemoteProfileEntity>[];
+        final current = ref.read(subscriptionProfilesProvider).value ?? const <RemoteProfileEntity>[];
         final ids = current.map((p) => p.id).toSet();
         available.removeWhere((id) => !ids.contains(id));
         for (final profile in current) {

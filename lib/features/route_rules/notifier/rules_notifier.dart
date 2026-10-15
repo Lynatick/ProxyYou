@@ -142,9 +142,10 @@ class RulesNotifier extends _$RulesNotifier with AppLogger {
   }
 
   Future<void> reorder(int oldIndex, int newIndex) async {
-    final current = state;
+    final current = state.toList();
     final rule = current.removeAt(oldIndex);
-    current.insert(oldIndex < newIndex ? newIndex - 1 : newIndex, rule);
+    // onReorderItem already adjusts the destination after removing the item.
+    current.insert(newIndex, rule);
     state = _updateListOrder(current).toList();
     await _updateFile();
   }

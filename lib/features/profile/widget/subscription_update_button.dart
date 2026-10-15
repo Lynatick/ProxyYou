@@ -10,7 +10,7 @@ class SubscriptionUpdateButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final updates = ref.watch(subscriptionUpdatesProvider);
     final updating = ref.watch(subscriptionsUpdatingProvider);
-    final profiles = ref.watch(subscriptionProfilesProvider).valueOrNull;
+    final profiles = ref.watch(subscriptionProfilesProvider).value;
     final count = updates.available.length;
     final onPressed = updating || profiles == null || profiles.isEmpty
         ? null

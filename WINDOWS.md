@@ -14,7 +14,7 @@
 
 ## Сборка
 
-1. Установите Flutter 3.38.5 и Visual Studio 2022 с компонентами C++ для рабочего стола, Windows SDK и CMake. Для создания установщика добавьте Inno Setup 6.3+.
+1. Установите Flutter 3.47.7 (Dart 3.13.5) и Visual Studio 2022 с компонентами C++ для рабочего стола, Windows SDK и CMake. Для создания установщика добавьте Inno Setup 6.3+.
 2. Подготовьте нативное ядро Hiddify Core v4.1.0 с подмодулями на закреплённых коммитах, Go 1.25.6 и x64 MinGW. На Linux/macOS выполните `scripts/build-windows-core.sh /path/to/hiddify-core`; можно задать CC для LLVM-MinGW. Патч ограничения проверок находится в native-patches/youtube-monitoring.patch.
 3. Убедитесь, что hiddify-core/windows-x64 содержит hiddify-core.dll, libcronet.dll и HiddifyCli.exe. Готовые macOS/Android-библиотеки для Windows не подходят.
 4. В PowerShell из папки проекта выполните `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1 -InstallerOnly`. Скрипт запускает тесты, явно собирает windows-x64 и создаёт только установщик EXE; при -InstallerOnly наличие ISCC.exe обязательно.
