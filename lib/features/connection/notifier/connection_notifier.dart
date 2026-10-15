@@ -7,6 +7,7 @@ import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/connection/data/connection_data_providers.dart';
 import 'package:hiddify/features/connection/data/connection_repository.dart';
 import 'package:hiddify/features/connection/model/connection_failure.dart';
+import 'package:hiddify/features/connection/model/connection_operations.dart';
 import 'package:hiddify/features/connection/model/connection_status.dart';
 import 'package:hiddify/features/connection/model/startup_connection.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
@@ -119,11 +120,15 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     }
   }
 
-  Future<void> reconnect(ProfileEntity? profile) async {
+  final _operations = ConnectionOperationQueue();
+
+  Future<void> reconnect(ProfileEntity? profile) => _operations.run(() => _reconnectNow(profile));
+
+  Future<void> _reconnectNow(ProfileEntity? profile) async {
     if (state case AsyncData(:final value) when value == const Connected()) {
       if (profile == null) {
         loggy.info("no active profile, disconnecting");
-        return _disconnect();
+        return _disconnectNow();
       }
       loggy.info("active profile changed, reconnecting");
       await ref.read(Preferences.startedByUser.notifier).update(true);
@@ -148,18 +153,10 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     }
   }
 
-  final _singleStart = SingleCall();
-
-  Future<void> _connect() async {
-    _singleStart.run(
-      () async {
-        await _connectThrottled();
-      },
-      onIgnored: () {
-        loggy.debug("connect called while another connect/disconnect is still running, ignoring");
-      },
-    );
-  }
+  Future<void> _connect() => _operations.run(() async {
+    if (state.value?.isConnected ?? false) return;
+    await _connectThrottled();
+  });
 
   Future<void> _connectThrottled() async {
     final activeProfile = await ref.read(activeProfileProvider.future);
@@ -184,13 +181,18 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     }).run();
   }
 
-  Future<void> _disconnect() async {
+  Future<void> _disconnect() => _operations.run(_disconnectNow);
+
+  Future<void> _disconnectNow() async {
+    state = const AsyncData(Disconnecting());
     await _connectionRepo.disconnect().mapLeft((err) {
       loggy.warning("error disconnecting", err);
       ref
           .read(dialogNotifierProvider.notifier)
           .showCustomAlertFromErr(err.present(ref.read(translationsProvider).requireValue));
-      state = AsyncError(err, StackTrace.current);
+      // Keep Stop available after a failed restore/RPC. AsyncError made the
+      // next click attempt Start while the existing core was still running.
+      if (state.value is! Disconnected) state = const AsyncData(Connected());
     }).run();
   }
 }
@@ -199,19 +201,4 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
 bool serviceRunning(Ref ref) {
   // ref.watch(coreRestartSignalProvider);
   return ref.watch(connectionNotifierProvider).value?.isConnected ?? false;
-}
-
-class SingleCall {
-  bool _running = false;
-
-  Future<T> run<T>(Future<T> Function() task, {required T onIgnored}) async {
-    if (_running) return onIgnored;
-
-    _running = true;
-    try {
-      return await task();
-    } finally {
-      _running = false;
-    }
-  }
 }

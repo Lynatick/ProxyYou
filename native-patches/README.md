@@ -1,4 +1,4 @@
-# Ядро ProxyYou 4.1.20
+# Ядро ProxyYou
 
 Использована версия Hiddify Core v4.1.0 и её закреплённые подмодули. Изменения мониторинга в `hiddify-sing-box/common/monitoring/outbound_monitoring.go`: по умолчанию 20 рабочих обработчиков, максимум 20; единственный URL — `https://www.youtube.com/generate_204`; дополнительные запросы определения IP после успешного URL-теста убраны. Они ранее выполнялись внутри проверки задержки и могли менять измеренную задержку по ответу другого сайта.
 
@@ -6,7 +6,7 @@
 
 Пересборка: Go 1.25.6. macOS arm64: `go build -trimpath -ldflags='-w -s -checklinkname=0 -buildid=' -tags=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack,with_dhcp -buildmode=c-shared -o hiddify-core.dylib ./platform/desktop`.
 
-Android: gomobile/gobind v0.1.11, NDK 28.2.13676358, JDK 17. Команда из корня ядра: `CGO_LDFLAGS='-O2 -g -s -w -Wl,-z,max-page-size=16384' gomobile bind -androidapi=24 -javapkg=com.hiddify.core -libname=hiddify-core -tags=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack -trimpath -ldflags='-w -s -checklinkname=0 -buildid=' -target=android/arm,android/arm64,android/amd64 -o hiddify-core.aar github.com/sagernet/sing-box/experimental/libbox ./platform/mobile`. Опции `-gcflags 'all=-N -l'` из upstream Makefile намеренно не используются: они отключали оптимизацию и встраивание функций.
+Android: gomobile/gobind v0.1.11, NDK 28.2.13676358, JDK 25. Команда из корня ядра: `CGO_LDFLAGS='-O2 -g -s -w -Wl,-z,max-page-size=16384' gomobile bind -androidapi=24 -javapkg=com.hiddify.core -libname=hiddify-core -tags=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack -trimpath -ldflags='-w -s -checklinkname=0 -buildid=' -target=android/arm,android/arm64,android/amd64 -o hiddify-core.aar github.com/sagernet/sing-box/experimental/libbox ./platform/mobile`. Опции `-gcflags 'all=-N -l'` из upstream Makefile намеренно не используются: они отключали оптимизацию и встраивание функций.
 
 Поместить dylib в `hiddify-core/bin/hiddify-core.dylib`, AAR — в `android/app/libs/hiddify-core.aar`. Крупные бинарные зависимости исключены из архива исходников. Автоматическая загрузка исходного официального бинарника без патча вернёт прежний лимит.
 
@@ -19,3 +19,23 @@ Android: gomobile/gobind v0.1.11, NDK 28.2.13676358, JDK 17. Команда из
 `connection-continuity.patch` выключает принудительный разрыв клиентских соединений в генерируемых группах `lowest`, `balance`, `select`. После выбора другого сервера новые соединения используют новый маршрут, открытые остаются на прежнем до завершения. При отказе прежнего транспорта сохранить его TCP-сессию невозможно. Пользовательские raw-конфиги не переписываются.
 
 Применять патч из корня Hiddify Core ко всем целевым платформам, включая Android AAR. macOS/Windows-скрипты применяют его автоматически. Для Android сначала выполнить `patch -p1 < /путь/к/connection-continuity.patch`, затем `gomobile bind` по команде выше. Для проверки генератора: `go test ./v2/config -run TestProxyYou`. Для проверки переключения: `go test -v ./continuitycheck`. Стенд использует только локальные TCP/UDP и TLS, без изменения системных прокси. Дополнительные варианты hashing/sticky тестируются с явно заданными retry/TTL; основные Lowest/Round-robin — со штатными параметрами.
+
+## Стабильность соединения 4.1.22
+
+После предыдущих патчей применяется `connection-stability.patch`: допуск только
+проверенных серверов, ограниченные повторы установления через другие узлы,
+перепроверка при смене сети, учёт IPv6 физического интерфейса, TTL DNS и безопасные
+значения по умолчанию. Обработчики входящего TCP/UDP используют тот же путь
+повторного установления, что и прямые вызовы ядра.
+
+Применение: `bash scripts/apply-native-stability.sh /путь/к/core-source`.
+Нативные сборки: `bash scripts/build-macos-core.sh /путь/к/core-source arm64`
+(или `amd64`), `bash scripts/build-windows-core.sh /путь/к/core-source`,
+`bash scripts/build-android-core.sh /путь/к/core-source` (Java 25).
+Скрипты создают локальную запись SHA-256 ядра и патча; сборка приложения проверяет
+её. Автоматическая подмена ядра официальной непатченной библиотекой отключена.
+
+Проверки из корня ядра: `go test -race github.com/sagernet/sing-box/protocol/group/balancer
+github.com/sagernet/sing-box/common/dialer github.com/sagernet/sing-box/common/monitoring -run TestProxyYou`,
+`go test ./v2/config -run TestProxyYou`, `go test -race ./continuitycheck`.
+Подробности: [VALIDATION-4.1.22.md](../docs/VALIDATION-4.1.22.md).

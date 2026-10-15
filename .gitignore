@@ -96,3 +96,6 @@ macos/com.apple.DeveloperTools/
 /test/features/youtube/fixtures/*.crt
 /out/
 /hiddify_portable_data/
+
+# Local attestations for patched native binaries
+*.proxyyou.json

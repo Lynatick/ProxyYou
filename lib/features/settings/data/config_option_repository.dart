@@ -140,7 +140,7 @@ abstract class ConfigOptions {
     mapTo: (value) => value.name,
   );
 
-  static final mtu = PreferencesNotifier.create<int, int>("mtu", 9000);
+  static final mtu = PreferencesNotifier.create<int, int>("mtu", 1400);
 
   static final strictRoute = PreferencesNotifier.create<bool, bool>("strict-route", true);
 
@@ -153,7 +153,7 @@ abstract class ConfigOptions {
 
   static final urlTestInterval = PreferencesNotifier.create<Duration, int>(
     "url-test-interval",
-    const Duration(minutes: 10),
+    const Duration(minutes: 5),
     mapFrom: const IntervalInSecondsConverter().fromJson,
     mapTo: const IntervalInSecondsConverter().toJson,
   );

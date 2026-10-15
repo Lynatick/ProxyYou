@@ -176,35 +176,37 @@ void main() {
     expect(find.byKey(const ValueKey('tv-focus-ring')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('update actions open the download website instead of the release URL', (tester) async {
-    final launcher = RecordingLauncher();
-    final previous = UrlLauncherPlatform.instance;
-    UrlLauncherPlatform.instance = launcher;
-    addTearDown(() => UrlLauncherPlatform.instance = previous);
-    final translations = (await tester.runAsync(() => AppLocale.ru.build()))!;
-    final info = version('4.1.20');
-    final surfaces = <Widget>[const AppUpdateCard(), NewVersionDialog('4.1.19', info, canIgnore: false)];
-    for (final surface in surfaces) {
-      await tester.pumpWidget(
-        ProviderScope(
-          key: ValueKey(surface.runtimeType),
-          overrides: [
-            appUpdateNotifierProvider.overrideWith(() => TestUpdate(AppUpdateState.available(info))),
-            translationsProvider.overrideWithValue(AsyncData(translations)),
-          ],
-          child: MaterialApp(home: Scaffold(body: surface)),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.text(surface is AppUpdateCard ? 'Скачать обновление' : translations.dialogs.newVersion.updateNow),
-      );
-      await tester.pumpAndSettle();
-      expect(launcher.launchedUrl, Constants.downloadPageUrl);
-      expect(launcher.launchedUrl, 'https://lynatick.github.io/proxyyou/');
-      launcher.launchedUrl = null;
-    }
-  });
+  for (final platform in [TargetPlatform.macOS, TargetPlatform.android, TargetPlatform.windows]) {
+    testWidgets('update actions open the download website on ${platform.name}', (tester) async {
+      final launcher = RecordingLauncher();
+      final previous = UrlLauncherPlatform.instance;
+      UrlLauncherPlatform.instance = launcher;
+      addTearDown(() => UrlLauncherPlatform.instance = previous);
+      final translations = (await tester.runAsync(() => AppLocale.ru.build()))!;
+      final info = version('4.1.20');
+      final surfaces = <Widget>[const AppUpdateCard(), NewVersionDialog('4.1.19', info, canIgnore: false)];
+      for (final surface in surfaces) {
+        await tester.pumpWidget(
+          ProviderScope(
+            key: ValueKey(surface.runtimeType),
+            overrides: [
+              appUpdateNotifierProvider.overrideWith(() => TestUpdate(AppUpdateState.available(info))),
+              translationsProvider.overrideWithValue(AsyncData(translations)),
+            ],
+            child: MaterialApp(home: Scaffold(body: surface)),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.text(surface is AppUpdateCard ? 'Скачать обновление' : translations.dialogs.newVersion.updateNow),
+        );
+        await tester.pumpAndSettle();
+        expect(launcher.launchedUrl, Constants.downloadPageUrl);
+        expect(launcher.launchedUrl, 'https://lynatick.github.io/proxyyou/');
+        launcher.launchedUrl = null;
+      }
+    }, variant: TargetPlatformVariant({platform}));
+  }
   testWidgets('no banner is shown for unavailable or failed checks', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
