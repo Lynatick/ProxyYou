@@ -11,9 +11,14 @@ enum ProxyFailure: Error { case invalidRequest, unavailable, commitFailed }
 
 final class NetworkProxyStore: ProxyStore {
   func transaction(_ change: (inout ProxyConfigurations) throws -> Void) throws {
-    guard let prefs = SCPreferencesCreate(nil, "ProxyYou session helper" as CFString, nil),
-      SCPreferencesLock(prefs, true)
+    guard let prefs = SCPreferencesCreate(nil, "ProxyYou session helper" as CFString, nil)
     else { throw ProxyFailure.unavailable }
+    // Never wait indefinitely for another process to release network preferences.
+    let deadline = ProcessInfo.processInfo.systemUptime + 3
+    while !SCPreferencesLock(prefs, false) {
+      guard ProcessInfo.processInfo.systemUptime < deadline else { throw ProxyFailure.unavailable }
+      Thread.sleep(forTimeInterval: 0.05)
+    }
     defer { SCPreferencesUnlock(prefs) }
     guard let services = SCNetworkServiceCopyAll(prefs) as? [SCNetworkService] else {
       throw ProxyFailure.unavailable
@@ -118,7 +123,10 @@ final class ProxySession {
 func readRequest() -> Data? {
   var data = Data()
   var byte: UInt8 = 0
-  while read(STDIN_FILENO, &byte, 1) == 1 {
+  while true {
+    let received = read(STDIN_FILENO, &byte, 1)
+    if received < 0 && errno == EINTR { continue }
+    guard received == 1 else { return nil }
     if byte == 10 { return data }
     data.append(byte)
     if data.count > 262144 { return nil }
@@ -144,7 +152,9 @@ func send(_ response: [String: Any]) {
 // Tests use an in-memory network store, never system preferences or elevated privileges.
 final class MemoryProxyStore: ProxyStore {
   var configs: ProxyConfigurations = ["wifi": ["HTTPEnable": 0], "ethernet": [:]]
+  var failNext = false
   func transaction(_ change: (inout ProxyConfigurations) throws -> Void) throws {
+    if failNext { failNext = false; throw ProxyFailure.unavailable }
     try change(&configs)
   }
 }
@@ -173,13 +183,23 @@ func selfTest() throws {
     _ = try session.handle(["command": "execute", "path": "/bin/sh"])
     preconditionFailure("Unknown command accepted")
   } catch ProxyFailure.invalidRequest {}
+  _ = try session.enable(port: 12334)
+  let retryBackup = session.backups
+  store.failNext = true
+  do {
+    _ = try session.handle(["command": "restore", "backups": retryBackup, "port": 12334])
+    preconditionFailure("Simulated busy network store accepted")
+  } catch ProxyFailure.unavailable {}
+  precondition(!session.backups.isEmpty)
+  _ = try session.handle(["command": "restore", "backups": retryBackup, "port": 12334])
+  precondition(session.backups.isEmpty)
   // The helper's lifetime, rather than a 30-second authorization credential, controls access.
   for _ in 0..<20 {
     _ = try session.handle(["command": "enable", "port": 12334])
     _ = try session.handle(["command": "restore", "backups": session.backups, "port": 12334])
   }
   print(
-    "PASS: enable, repeated port changes, restore, external changes, invalid commands, 20 reconnects"
+    "PASS: enable, repeated port changes, restore, external changes, invalid commands, restore retry after busy store, 20 reconnects"
   )
 }
 

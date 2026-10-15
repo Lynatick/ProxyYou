@@ -221,6 +221,7 @@ final class MacSystemProxy {
   private let backupKey = "proxyyou.systemProxyBackup"
   private let portKey = "proxyyou.systemProxyPort"
   private var channel: FlutterMethodChannel?
+  private let requests = DispatchQueue(label: "dev.proxyyou.system-proxy", qos: .userInitiated)
 
   private func failure(_ message: String) -> NSError {
     NSError(domain: "ProxyYou", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
@@ -266,27 +267,29 @@ final class MacSystemProxy {
     channel = FlutterMethodChannel(name: "dev.proxyyou/system-proxy", binaryMessenger: messenger)
     channel?.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { return }
-      do {
-        switch call.method {
-        case "enable":
-          guard let args = call.arguments as? [String: Any], let port = args["port"] as? Int,
-            (1...65535).contains(port)
-          else { throw self.failure("Неверный порт прокси.") }
-          let response = try self.request(["command": "enable", "port": port])
-          guard let backups = response["backups"] as? [String: Any] else {
-            throw self.failure("Не удалось сохранить прежние сетевые настройки.")
+      self.requests.async {
+        do {
+          switch call.method {
+          case "enable":
+            guard let args = call.arguments as? [String: Any], let port = args["port"] as? Int,
+              (1...65535).contains(port)
+            else { throw self.failure("Неверный порт прокси.") }
+            let response = try self.request(["command": "enable", "port": port])
+            guard let backups = response["backups"] as? [String: Any] else {
+              throw self.failure("Не удалось сохранить прежние сетевые настройки.")
+            }
+            UserDefaults.standard.set(backups, forKey: self.backupKey)
+            UserDefaults.standard.set(port, forKey: self.portKey)
+          case "restore": try self.restore()
+          default:
+            DispatchQueue.main.async { result(FlutterMethodNotImplemented) }
+            return
           }
-          UserDefaults.standard.set(backups, forKey: self.backupKey)
-          UserDefaults.standard.set(port, forKey: self.portKey)
-        case "restore": try self.restore()
-        default:
-          result(FlutterMethodNotImplemented)
-          return
+          DispatchQueue.main.async { result(nil) }
+        } catch {
+          let message = error.localizedDescription
+          DispatchQueue.main.async { result(FlutterError(code: "system_proxy", message: message, details: nil)) }
         }
-        result(nil)
-      } catch {
-        result(
-          FlutterError(code: "system_proxy", message: error.localizedDescription, details: nil))
       }
     }
   }
@@ -308,9 +311,15 @@ final class MacSystemProxy {
     while data.count <= 262144 {
       var descriptor = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
       let remaining = max(0, Int32(deadline.timeIntervalSinceNow * 1000))
-      guard remaining > 0, poll(&descriptor, 1, remaining) > 0,
-        read(fd, &byte, 1) == 1
-      else {
+      guard remaining > 0 else {
+        closePipe()
+        throw failure("Помощник системного прокси не ответил вовремя. Повторите после перезапуска приложения.")
+      }
+      let polled = poll(&descriptor, 1, remaining)
+      if polled < 0 && errno == EINTR { continue }
+      let received = polled > 0 ? read(fd, &byte, 1) : -1
+      if received < 0 && errno == EINTR { continue }
+      guard polled > 0, received == 1 else {
         closePipe()
         throw failure(
           "Помощник системного прокси завершился или не ответил. Перезапустите приложение.")
@@ -351,6 +360,7 @@ final class MacSystemProxy {
       var offset = 0
       while offset < buffer.count {
         let count = write(fd, buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
+        if count < 0 && errno == EINTR { continue }
         if count <= 0 { return false }
         offset += count
       }
@@ -374,8 +384,10 @@ final class MacSystemProxy {
   }
 
   func finishSession() {
-    if pipe != nil { _ = try? request(["command": "finish"]) }
-    closePipe()
+    requests.sync {
+      if pipe != nil { _ = try? request(["command": "finish"]) }
+      closePipe()
+    }
   }
 }
 

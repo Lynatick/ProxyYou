@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:fpdart/fpdart.dart';
@@ -13,6 +14,7 @@ import 'package:hiddify/core/utils/latest_async_map.dart';
 import 'package:hiddify/features/app/core_resume_handler.dart';
 import 'package:hiddify/features/app_based_routing/mac_app_preferences.dart';
 import 'package:hiddify/features/connection/model/connection_failure.dart';
+import 'package:hiddify/features/connection/model/connection_operations.dart';
 import 'package:hiddify/features/log/model/log_level.dart' as config_log_level;
 import 'package:hiddify/features/profile/data/atomic_config_writer.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
@@ -289,17 +291,40 @@ class HiddifyCoreService with InfraLogger {
     });
   }
 
+  final _macDisconnect = MacDisconnectController();
+
+  Future<Either<String, Unit>> _stopMac() async {
+    try {
+      await _macDisconnect.run(
+        restoreProxy: () => _systemProxy.invokeMethod<void>('restore'),
+        stopCore: () async {
+          final response = await core.bgClient.stop(
+            Empty(),
+            options: CallOptions(timeout: const Duration(seconds: 10)),
+          );
+          if (response.coreState != CoreStates.STOPPED ||
+              (response.messageType != MessageType.EMPTY && response.messageType != MessageType.ALREADY_STOPPED)) {
+            throw StateError(response.message.isEmpty ? 'Ядро не подтвердило остановку.' : response.message);
+          }
+        },
+      );
+      statusController.add(currentState = const CoreStatus.stopped());
+      return right(unit);
+    } catch (error) {
+      loggy.error('macOS disconnect failed', error);
+      // A late status event may still confirm completion. Until then keep the
+      // operation retryable instead of leaving the UI in Stopping forever.
+      if (currentState is! CoreStopped) statusController.add(currentState = const CoreStatus.started());
+      final message = error is PlatformException ? error.message : null;
+      return left(message ?? 'Не удалось завершить отключение. Повторите попытку.');
+    }
+  }
+
   TaskEither<String, Unit> stop() {
     return TaskEither(() async {
       loggy.debug("stopping");
+      if (PlatformUtils.isMacOS) return _stopMac();
       var errMsg = "";
-      if (PlatformUtils.isMacOS) {
-        try {
-          await _systemProxy.invokeMethod<void>('restore');
-        } on PlatformException catch (e) {
-          return left(e.message ?? 'Не удалось восстановить системный прокси.');
-        }
-      }
       try {
         await core.bgClient.stop(Empty());
       } on GrpcError catch (e) {

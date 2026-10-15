@@ -1,0 +1,1273 @@
+--- a/hiddify-sing-box/protocol/group/balancer/balancer.go
++++ b/hiddify-sing-box/protocol/group/balancer/balancer.go
+@@ -92,14 +92,8 @@
+ 		outbounds = append(outbounds, detour)
+ 	}
+ 	switch s.options.Strategy {
+-	case StrategyRoundRobin:
+-		s.strategyFn = NewRoundRobin(outbounds, s.options)
+-	case StrategyConsistentHashing:
+-		s.strategyFn = NewConsistentHashing(outbounds, s.options)
+-	case StrategyStickySessions:
+-		s.strategyFn = NewStickySession(outbounds, s.options)
+-	case StrategyLowestDelay:
+-		s.strategyFn = NewLowestDelay(outbounds, s.options)
++	case StrategyRoundRobin, StrategyConsistentHashing, StrategyStickySessions, StrategyLowestDelay:
++		s.strategyFn = newHealthyStrategy(outbounds, s.options)
+ 	default:
+ 		return E.New("unknown load balance strategy: ", s.options.Strategy)
+ 	}
+@@ -120,6 +114,7 @@
+ 		return
+ 	}
+ 	defer s.monitor.UnsubscribeGroup(s.Tag(), observer)
++	s.strategyFn.UpdateOutboundsInfo(s.monitor.OutboundsHistory(s.Tag()))
+ 
+ 	for {
+ 		select {
+@@ -163,22 +158,15 @@
+ 	if metadata == nil {
+ 		metadata = &adapter.InboundContext{}
+ 	}
+-	outbound := s.strategyFn.Select(*metadata, network, true)
+-	if outbound == nil {
+-		return nil, E.New("missing supported outbound")
+-	}
+-	if metadata != nil {
+-		metadata.SetRealOutbound(outbound.Tag())
+-	}
+-
+-	conn, err := outbound.DialContext(ctx, network, destination)
+-	if err == nil {
+-		return s.interruptGroup.NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
+-	}
+-	s.logger.ErrorContext(ctx, err)
+-	s.monitor.InvalidateTest(outbound.Tag())
+-
+-	return nil, err
++	return establish(ctx, s.strategyFn.(*healthyStrategy), *metadata, network,
++		func(attempt context.Context, outbound adapter.Outbound) (net.Conn, error) {
++			metadata.SetRealOutbound(outbound.Tag())
++			conn, err := outbound.DialContext(attempt, network, destination)
++			if err != nil {
++				return nil, err
++			}
++			return s.interruptGroup.NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
++		}, func(tag string) { s.monitor.InvalidateTest(tag) })
+ }
+ 
+ func (s *Balancer) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
+@@ -186,47 +174,25 @@
+ 	if metadata == nil {
+ 		metadata = &adapter.InboundContext{}
+ 	}
+-	outbound := s.strategyFn.Select(*metadata, N.NetworkUDP, true)
+-	if outbound == nil {
+-		return nil, E.New("missing supported outbound")
+-	}
+-	if metadata != nil {
+-		metadata.SetRealOutbound(outbound.Tag())
+-	}
+-
+-	conn, err := outbound.ListenPacket(ctx, destination)
+-	if err == nil {
+-		return s.interruptGroup.NewPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
+-	}
+-	s.logger.ErrorContext(ctx, err)
+-	s.monitor.InvalidateTest(outbound.Tag())
+-	return nil, err
++	return establish(ctx, s.strategyFn.(*healthyStrategy), *metadata, N.NetworkUDP,
++		func(attempt context.Context, outbound adapter.Outbound) (net.PacketConn, error) {
++			metadata.SetRealOutbound(outbound.Tag())
++			conn, err := outbound.ListenPacket(attempt, destination)
++			if err != nil {
++				return nil, err
++			}
++			return s.interruptGroup.NewPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
++		}, func(tag string) { s.monitor.InvalidateTest(tag) })
+ }
+ 
+ func (s *Balancer) NewConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
+ 	ctx = interrupt.ContextWithIsExternalConnection(ctx)
+-	selected := s.strategyFn.Select(metadata, metadata.Network, true)
+-	conn = s.interruptGroup.NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx))
+-	if outboundHandler, isHandler := selected.(adapter.ConnectionHandlerEx); isHandler {
+-		outboundHandler.NewConnectionEx(ctx, conn, metadata, onClose)
+-	} else {
+-		s.connection.NewConnection(ctx, selected, conn, metadata, onClose)
+-	}
++	s.connection.NewConnection(ctx, s, conn, metadata, onClose)
+ }
+ 
+ func (s *Balancer) NewPacketConnectionEx(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
+ 	ctx = interrupt.ContextWithIsExternalConnection(ctx)
+-	selected := s.strategyFn.Select(metadata, metadata.Network, true)
+-	if selected == nil {
+-		return
+-	}
+-	metadata.SetRealOutbound(selected.Tag())
+-	conn = s.interruptGroup.NewSingPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx))
+-	if outboundHandler, isHandler := selected.(adapter.PacketConnectionHandlerEx); isHandler {
+-		outboundHandler.NewPacketConnectionEx(ctx, conn, metadata, onClose)
+-	} else {
+-		s.connection.NewPacketConnection(ctx, selected, conn, metadata, onClose)
+-	}
++	s.connection.NewPacketConnection(ctx, s, conn, metadata, onClose)
+ }
+ 
+ func (s *Balancer) NewDirectRouteConnection(metadata adapter.InboundContext, routeContext tun.DirectRouteContext, timeout time.Duration) (tun.DirectRouteDestination, error) {
+--- a/hiddify-sing-box/protocol/group/balancer/lowest_delay.go
++++ b/hiddify-sing-box/protocol/group/balancer/lowest_delay.go
+@@ -4,6 +4,7 @@
+ 	"sync"
+ 
+ 	"github.com/sagernet/sing-box/adapter"
++	"github.com/sagernet/sing-box/common/monitoring"
+ 	"github.com/sagernet/sing-box/option"
+ 	N "github.com/sagernet/sing/common/network"
+ )
+@@ -13,13 +14,15 @@
+ 	udpOutbounds     []adapter.Outbound
+ 	selectedOutbound map[string]adapter.Outbound
+ 
+-	mu sync.Mutex
++	tolerance uint16
++	mu        sync.Mutex
+ }
+ 
+ func NewLowestDelay(outbounds []adapter.Outbound, options option.BalancerOutboundOptions) *LowestDelay {
+ 	couts := convertOutbounds(outbounds)
+ 	return &LowestDelay{
+ 		outbounds: couts,
++		tolerance: options.Tolerance,
+ 		selectedOutbound: map[string]adapter.Outbound{
+ 			N.NetworkUDP: couts[N.NetworkUDP][0],
+ 			N.NetworkTCP: couts[N.NetworkTCP][0],
+@@ -36,11 +39,17 @@
+ 	return s.selectedOutbound[N.NetworkTCP].Tag()
+ }
+ func (s *LowestDelay) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
+-	min, _ := getMinDelay(s.outbounds, history)
++	min, delays := getMinDelay(s.outbounds, history)
+ 
+ 	s.mu.Lock()
+ 	changed := false
+ 	for net, out := range min {
++		current := s.selectedOutbound[net]
++		if current != nil && getTagDelay(current.Tag(), history) < monitoring.TimeoutDelay &&
++			uint32(getTagDelay(current.Tag(), history)) <= uint32(delays[net])+uint32(s.tolerance) {
++			min[net] = current
++			continue
++		}
+ 		changed = changed || out.Tag() != s.selectedOutbound[net].Tag()
+ 	}
+ 	s.selectedOutbound = min
+--- a/hiddify-sing-box/protocol/group/balancer/common.go
++++ b/hiddify-sing-box/protocol/group/balancer/common.go
+@@ -132,7 +132,7 @@
+ 	for net, outs := range sortedOutbounds {
+ 		minDelay := getTagDelay(outs[0].Tag(), history)
+ 
+-		maxAcceptableDelay := float64(math.Max(100, float64(minDelay))) * delayAcceptableRatio
++		maxAcceptableDelay := math.Min(float64(monitoring.TimeoutDelay-1), math.Max(100, float64(minDelay))*delayAcceptableRatio)
+ 
+ 		maxAvailableIndex := 0
+ 		for i, outbound := range outs {
+--- a/hiddify-sing-box/common/dialer/default.go
++++ b/hiddify-sing-box/common/dialer/default.go
+@@ -36,6 +36,7 @@
+ 	udpListener            net.ListenConfig
+ 	udpAddr4               string
+ 	udpAddr6               string
++	explicitInterface      bool
+ 	netns                  string
+ 	networkManager         adapter.NetworkManager
+ 	networkStrategy        *C.NetworkStrategy
+@@ -206,6 +207,7 @@
+ 		udpAddr4:               udpAddr4,
+ 		udpAddr6:               udpAddr6,
+ 		netns:                  options.NetNs,
++		explicitInterface:      options.BindInterface != "" || options.Inet4BindAddress != nil || options.Inet6BindAddress != nil || options.NetNs != "",
+ 		networkManager:         networkManager,
+ 		networkStrategy:        networkStrategy,
+ 		defaultNetworkStrategy: defaultNetworkStrategy,
+--- a/hiddify-sing-box/common/dialer/resolve.go
++++ b/hiddify-sing-box/common/dialer/resolve.go
+@@ -104,6 +104,10 @@
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	addresses = d.usableAddresses(addresses)
++	if len(addresses) == 0 {
++		return nil, E.New("no reachable address family for ", destination.Fqdn)
++	}
+ 	if d.parallel {
+ 		return N.DialParallel(ctx, d.dialer, network, destination, addresses, d.queryOptions.Strategy == C.DomainStrategyPreferIPv6, d.fallbackDelay)
+ 	} else {
+@@ -124,6 +128,10 @@
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	addresses = d.usableAddresses(addresses)
++	if len(addresses) == 0 {
++		return nil, E.New("no reachable address family for ", destination.Fqdn)
++	}
+ 	conn, destinationAddress, err := N.ListenSerial(ctx, d.dialer, destination, addresses)
+ 	if err != nil {
+ 		return nil, err
+@@ -151,6 +159,10 @@
+ 	addresses, err := d.router.Lookup(ctx, destination.Fqdn, d.queryOptions)
+ 	if err != nil {
+ 		return nil, err
++	}
++	addresses = d.usableAddresses(addresses)
++	if len(addresses) == 0 {
++		return nil, E.New("no reachable address family for ", destination.Fqdn)
+ 	}
+ 	if fallbackDelay == 0 {
+ 		fallbackDelay = d.fallbackDelay
+@@ -175,6 +187,10 @@
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	addresses = d.usableAddresses(addresses)
++	if len(addresses) == 0 {
++		return nil, E.New("no reachable address family for ", destination.Fqdn)
++	}
+ 	if fallbackDelay == 0 {
+ 		fallbackDelay = d.fallbackDelay
+ 	}
+--- a/v2/config/builder.go
++++ b/v2/config/builder.go
+@@ -63,6 +63,10 @@
+ // TODO include selectors
+ func BuildConfig(ctx context.Context, hopts *HiddifyOptions, inputOpt *ReadOptions) (*option.Options, error) {
+ 
++	stableOptions := *hopts
++	stableOptions.DirectDnsDomainStrategy = stableDNSStrategy(hopts.IPv6Mode, hopts.DirectDnsDomainStrategy)
++	stableOptions.RemoteDnsDomainStrategy = stableDNSStrategy(hopts.IPv6Mode, hopts.RemoteDnsDomainStrategy)
++	hopts = &stableOptions
+ 	input, err := ReadSingOptions(ctx, inputOpt)
+ 	if err != nil {
+ 		return nil, err
+@@ -280,7 +284,7 @@
+ 			// URLs:      opt.ConnectionTestUrls,
+ 			// Interval:  badoption.Duration(opt.URLTestInterval.Duration()),
+ 			// IdleTimeout: badoption.Duration(opt.URLTestIdleTimeout.Duration()),
+-			Tolerance: 1,
++			Tolerance: 50,
+ 			// IdleTimeout:               badoption.Duration(opt.URLTestInterval.Duration().Nanoseconds() * 3),
+ 			InterruptExistConnections: false,
+ 		},
+@@ -297,7 +301,7 @@
+ 			// URLs:      opt.ConnectionTestUrls,
+ 			// Interval:  badoption.Duration(opt.URLTestInterval.Duration()),
+ 			// IdleTimeout: badoption.Duration(opt.URLTestIdleTimeout.Duration()),
+-			Tolerance: 1,
++			Tolerance: 50,
+ 			// IdleTimeout:               badoption.Duration(opt.URLTestInterval.Duration().Nanoseconds() * 3),
+ 			InterruptExistConnections: false,
+ 		},
+@@ -426,13 +430,27 @@
+ 		DisableColor: true,
+ 	}
+ }
++
++// Kernel socket support only; physical-network availability is checked by the
++// local resolver at connection time. Keep the TUN IPv6 route to prevent leaks.
+ func isIPv6Supported() bool {
+-	if C.IsIos || C.IsDarwin {
+-		return true
+-	}
+-	_, err := net.ResolveIPAddr("ip6", "::1")
+-	return err == nil
+-}
++	socket, err := net.ListenPacket("udp6", "[::1]:0")
++	if err != nil {
++		return false
++	}
++	socket.Close()
++	return true
++}
++func stableDNSStrategy(mode, strategy option.DomainStrategy) option.DomainStrategy {
++	if strategy != option.DomainStrategy(C.DomainStrategyAsIS) {
++		return strategy
++	}
++	if mode != option.DomainStrategy(C.DomainStrategyAsIS) {
++		return mode
++	}
++	return option.DomainStrategy(C.DomainStrategyPreferIPv4)
++}
++
+ func setInbound(options *option.Options, hopt *HiddifyOptions) {
+ 	// var inboundDomainStrategy option.DomainStrategy
+ 	// if !opt.ResolveDestination {
+--- a/v2/config/dns.go
++++ b/v2/config/dns.go
+@@ -27,7 +27,7 @@
+ 	DNSTricksDirectTag,
+ }
+ 
+-var DEFAULT_DNS_TTL = uint32(60 * 60 * 24)
++var DEFAULT_DNS_TTL = uint32(300)
+ 
+ func getDnsAddress(d string) string {
+ 	if !strings.Contains(d, "://") {
+@@ -100,7 +100,7 @@
+ 		RawDNSOptions: option.RawDNSOptions{
+ 			DNSClientOptions: option.DNSClientOptions{
+ 				IndependentCache: opt.IndependentDNSCache && !C.IsIos,
+-				DisableExpire:    true,
++				DisableExpire:    false,
+ 			},
+ 			Final: DNSMultiRemoteTag,
+ 
+--- a/hiddify-sing-box/common/monitoring/outbound_monitoring.go
++++ b/hiddify-sing-box/common/monitoring/outbound_monitoring.go
+@@ -86,8 +86,9 @@
+ 
+ 	cacheDirty atomic.Bool
+ 
+-	cycleSeq     uint64
++	cycleSeq     atomic.Uint64
+ 	cycleRunning atomic.Bool
++	networkEpoch atomic.Uint64
+ 
+ 	workerWG    sync.WaitGroup
+ 	schedulerWG sync.WaitGroup
+@@ -96,6 +97,21 @@
+ 
+ // InterfaceUpdated implements [adapter.InterfaceUpdateListener].
+ func (m *OutboundMonitoring) InterfaceUpdated() {
++	m.networkEpoch.Add(1)
++	for tag, state := range m.outbounds {
++		if _, group := m.groups[tag]; group {
++			continue
++		}
++		state.mu.Lock()
++		state.from_cache = true
++		state.invalid = true
++		state.mu.Unlock()
++	}
++	groups := make([]string, 0, len(m.groups))
++	for tag := range m.groups {
++		groups = append(groups, tag)
++	}
++	m.emitGroupEvent(groups)
+ 	m.startCycleOnce()
+ }
+ 
+@@ -328,9 +344,11 @@
+ 
+ 	m.pauseCallback = pause.RegisterTicker(m.pause, m.mainTicker, m.mainInterval, nil)
+ 	m.schedulerWG.Add(1)
+-	go m.scheduleLoop()
++	go m.scheduleLoop(m.mainTicker)
+ }
+ func (m *OutboundMonitoring) stopTimerWorkers() {
++	m.access.Lock()
++	defer m.access.Unlock()
+ 	if !m.workersRunning.CompareAndSwap(true, false) {
+ 		return
+ 	}
+@@ -378,7 +396,7 @@
+ 
+ 		task := &testTask{
+ 			outboundTag: outboundTag,
+-			cycleID:     m.cycleSeq,
++			cycleID:     m.cycleSeq.Load(),
+ 			priority:    priority,
+ 		}
+ 
+@@ -416,7 +434,7 @@
+ 
+ 	m.enqueueTask(&testTask{
+ 		outboundTag: outboundTag,
+-		cycleID:     m.cycleSeq,
++		cycleID:     m.cycleSeq.Load(),
+ 		priority:    true,
+ 	})
+ 
+@@ -440,6 +458,7 @@
+ 
+ func (m *OutboundMonitoring) Close() error {
+ 	m.closerOnce.Do(func() {
++		m.cancel()
+ 		m.stopTimerWorkers()
+ 
+ 		// close(m.priorityQueue)
+@@ -457,10 +476,9 @@
+ 	return nil
+ }
+ 
+-func (m *OutboundMonitoring) scheduleLoop() {
++func (m *OutboundMonitoring) scheduleLoop(ticker *time.Ticker) {
+ 	m.logger.Info("outbound monitoring schedule loop started")
+ 	m.startCycleOnce()
+-	ticker := m.mainTicker
+ 	for {
+ 		select {
+ 		case <-m.ctx.Done():
+@@ -540,16 +558,18 @@
+ 		return
+ 	}
+ 	done := make(chan struct{})
++	epoch := m.networkEpoch.Load()
+ 	go func() {
+ 		defer close(done)
+ 		delay, err := m.tester(m.ctx, task.outboundTag)
+ 
+ 		outcome := testOutcome{
+-			outboundTag: task.outboundTag,
+-			history:     delay,
+-			err:         err,
+-			cycleID:     task.cycleID,
+-			priority:    task.priority,
++			networkEpoch: epoch,
++			outboundTag:  task.outboundTag,
++			history:      delay,
++			err:          err,
++			cycleID:      task.cycleID,
++			priority:     task.priority,
+ 		}
+ 
+ 		m.applyResult(outcome)
+@@ -619,7 +639,7 @@
+ }
+ 
+ func (m *OutboundMonitoring) runCycle() {
+-	cycleID := atomic.AddUint64(&m.cycleSeq, 1)
++	cycleID := m.cycleSeq.Add(1)
+ 	tags := m.collectCycleTargets()
+ 
+ 	if len(tags) == 0 {
+@@ -739,11 +759,17 @@
+ 		return nil
+ 	}
+ 	state.mu.Lock()
+-	defer state.mu.Unlock()
+-
+ 	state.queued = false
+ 	state.priorityQueued = false
+ 	state.enqueuedCycle = 0
++	if outcome.networkEpoch != m.networkEpoch.Load() {
++		state.invalid = true
++		state.from_cache = true
++		state.mu.Unlock()
++		m.testNow(outcome.outboundTag, true)
++		return nil
++	}
++	defer state.mu.Unlock()
+ 	state.invalid = outcome.err != nil
+ 	state.lastURL = outcome.url
+ 	if (outcome.history.Delay != state.history.Delay) || state.history.IpInfo == nil || (outcome.history.IpInfo != nil) {
+@@ -793,9 +819,12 @@
+ 			state.mu.Unlock()
+ 			continue
+ 		}
+-		if state.invalid || time.Since(state.history.Time) >= m.mainInterval {
++		if state.from_cache || state.invalid || time.Since(state.history.Time) >= m.mainInterval {
+ 			tags = append(tags, tag)
+ 			delays[tag] = state.history.Delay
++			if delays[tag] == 0 {
++				delays[tag] = TimeoutDelay
++			}
+ 		}
+ 		state.mu.Unlock()
+ 	}
+@@ -828,8 +857,11 @@
+ 	}
+ 	m.access.Lock()
+ 	defer m.access.Unlock()
++	if m.ctx.Err() != nil {
++		return
++	}
++	m.lastActive.Store(time.Now())
+ 	if m.mainTicker != nil {
+-		m.lastActive.Store(time.Now())
+ 		return
+ 	}
+ 	m.startTimerWorkers()
+@@ -949,12 +981,13 @@
+ }
+ 
+ type testOutcome struct {
+-	outboundTag string
+-	url         string
+-	history     adapter.URLTestHistory
+-	err         error
+-	cycleID     uint64
+-	priority    bool
++	networkEpoch uint64
++	outboundTag  string
++	url          string
++	history      adapter.URLTestHistory
++	err          error
++	cycleID      uint64
++	priority     bool
+ }
+ 
+ type outboundState struct {
+--- a/v2/config/hiddify_option.go
++++ b/v2/config/hiddify_option.go
+@@ -125,13 +125,13 @@
+ 			TProxyPort:     12335,
+ 			RedirectPort:   12336,
+ 			DirectPort:     12337,
+-			MTU:            9000,
++			MTU:            1400,
+ 			StrictRoute:    true,
+ 			TUNStack:       "mixed",
+ 		},
+ 		URLTestOptions: URLTestOptions{
+-			ConnectionTestUrl: "http://cp.cloudflare.com/",
+-			URLTestInterval:   DurationInSeconds(600),
++			ConnectionTestUrl: "https://www.youtube.com/generate_204",
++			URLTestInterval:   DurationInSeconds(300),
+ 			// URLTestIdleTimeout: DurationInSeconds(6000),
+ 		},
+ 		RouteOptions: RouteOptions{
+--- a/continuitycheck/continuity_test.go
++++ b/continuitycheck/continuity_test.go
+@@ -36,12 +36,14 @@
+ 
+ type endpoint struct {
+ 	outbound.Adapter
+-	delay  atomic.Int64
+-	health string
+-	tcp    net.Listener
+-	udp    net.PacketConn
+-	mu     sync.Mutex
+-	peers  []net.Conn
++	delay   atomic.Int64
++	failTCP atomic.Bool
++	failUDP atomic.Bool
++	health  string
++	tcp     net.Listener
++	udp     net.PacketConn
++	mu      sync.Mutex
++	peers   []net.Conn
+ }
+ 
+ func newEndpoint(t *testing.T, tag, health string) *endpoint {
+@@ -93,6 +95,9 @@
+ 
+ func (e *endpoint) DialContext(ctx context.Context, network string, dest M.Socksaddr) (net.Conn, error) {
+ 	address := e.tcp.Addr().String()
++	if dest.Fqdn != "www.youtube.com" && e.failTCP.Load() {
++		return nil, fmt.Errorf("test transport refused")
++	}
+ 	if dest.Fqdn == "www.youtube.com" {
+ 		if dest.Port != 443 {
+ 			return nil, fmt.Errorf("unexpected probe port")
+@@ -118,6 +123,9 @@
+ 	return p.PacketConn.WriteTo(b, p.target)
+ }
+ func (e *endpoint) ListenPacket(context.Context, M.Socksaddr) (net.PacketConn, error) {
++	if e.failUDP.Load() {
++		return nil, fmt.Errorf("test packet transport refused")
++	}
+ 	c, err := net.ListenPacket("udp", "127.0.0.1:0")
+ 	if err != nil {
+ 		return nil, err
+@@ -280,6 +288,7 @@
+ 				}
+ 				a.delay.Store(400)
+ 				b.delay.Store(20)
++				monitor.InterfaceUpdated()
+ 				if err := monitor.TestNow("automatic"); err != nil {
+ 					t.Fatal(err)
+ 				}
+@@ -331,8 +340,13 @@
+ 					t.Fatal("manual selection failed")
+ 				}
+ 				if cut {
+-					if err := exchangeTCP(newTCP); err == nil {
+-						t.Fatal("selector should interrupt old TCP")
++					// interrupt.Conn.Close closes its upstream asynchronously.
++					deadline := time.Now().Add(time.Second)
++					for exchangeTCP(newTCP) == nil {
++						if time.Now().After(deadline) {
++							t.Fatal("selector should interrupt old TCP")
++						}
++						time.Sleep(time.Millisecond)
+ 					}
+ 				} else {
+ 					if err := exchangeTCP(newTCP); err != nil {
+--- /dev/null
++++ b/hiddify-sing-box/protocol/group/balancer/healthy_strategy.go
+@@ -0,0 +1,201 @@
++package balancer
++
++import (
++	"context"
++	"sync"
++	"time"
++
++	"github.com/sagernet/sing-box/adapter"
++	"github.com/sagernet/sing-box/common/monitoring"
++	"github.com/sagernet/sing-box/option"
++	"github.com/sagernet/sing/common"
++)
++
++const (
++	connectionBudget   = 15 * time.Second
++	attemptBudget      = 5 * time.Second
++	connectionAttempts = 3
++	failureCooldown    = 10 * time.Second
++)
++
++// Only a successful test in this process admits a server to automatic routing.
++// A cached result from another network must not bootstrap DNS through a dead node.
++type healthyStrategy struct {
++	mu        sync.Mutex
++	outbounds []adapter.Outbound
++	options   option.BalancerOutboundOptions
++	history   map[string]*adapter.URLTestHistory
++	failed    map[string]time.Time
++	active    []adapter.Outbound
++	strategy  Strategy
++	changed   chan struct{}
++}
++
++func newHealthyStrategy(outbounds []adapter.Outbound, options option.BalancerOutboundOptions) *healthyStrategy {
++	if options.MaxRetry <= 0 {
++		options.MaxRetry = connectionAttempts
++	}
++	if options.DelayAcceptableRatio < 1 {
++		options.DelayAcceptableRatio = 2
++	}
++	return &healthyStrategy{outbounds: outbounds, options: options,
++		history: make(map[string]*adapter.URLTestHistory), failed: make(map[string]time.Time), changed: make(chan struct{})}
++}
++
++func (s *healthyStrategy) rebuildLocked() bool {
++	now := time.Now()
++	active := make([]adapter.Outbound, 0, len(s.active)+4)
++	for _, out := range s.outbounds {
++		his := s.history[out.Tag()]
++		if his == nil || his.IsFromCache || his.Delay == 0 || his.Delay >= monitoring.TimeoutDelay {
++			continue
++		}
++		if failedAt, ok := s.failed[out.Tag()]; ok {
++			if !his.Time.After(failedAt) && now.Sub(failedAt) < failureCooldown {
++				continue
++			}
++			delete(s.failed, out.Tag())
++		}
++		active = append(active, out)
++	}
++	changed := len(active) != len(s.active)
++	if !changed {
++		for i := range active {
++			if active[i].Tag() != s.active[i].Tag() {
++				changed = true
++				break
++			}
++		}
++	}
++	if changed {
++		s.active = active
++		s.strategy = nil
++		if len(active) > 0 {
++			switch s.options.Strategy {
++			case StrategyRoundRobin:
++				s.strategy = NewRoundRobin(active, s.options)
++			case StrategyConsistentHashing:
++				s.strategy = NewConsistentHashing(active, s.options)
++			case StrategyStickySessions:
++				s.strategy = NewStickySession(active, s.options)
++			case StrategyLowestDelay:
++				s.strategy = NewLowestDelay(active, s.options)
++			}
++		}
++	}
++	if s.strategy != nil {
++		changed = s.strategy.UpdateOutboundsInfo(s.history) || changed
++	}
++	return changed
++}
++
++func (s *healthyStrategy) UpdateOutboundsInfo(history map[string]*adapter.URLTestHistory) bool {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	s.history = history
++	changed := s.rebuildLocked()
++	close(s.changed)
++	s.changed = make(chan struct{})
++	return changed
++}
++
++func (s *healthyStrategy) fail(tag string) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	s.failed[tag] = time.Now()
++	s.rebuildLocked()
++	close(s.changed)
++	s.changed = make(chan struct{})
++}
++
++func (s *healthyStrategy) selectLocked(metadata adapter.InboundContext, network string, touch bool, tried map[string]bool) adapter.Outbound {
++	if s.strategy == nil {
++		return nil
++	}
++	selected := s.strategy.Select(metadata, network, touch)
++	if selected != nil && !tried[selected.Tag()] && common.Contains(selected.Network(), network) {
++		return selected
++	}
++	for _, out := range s.active {
++		if !tried[out.Tag()] && common.Contains(out.Network(), network) {
++			return out
++		}
++	}
++	return nil
++}
++
++func (s *healthyStrategy) Select(metadata adapter.InboundContext, network string, touch bool) adapter.Outbound {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	return s.selectLocked(metadata, network, touch, nil)
++}
++
++func (s *healthyStrategy) wait(ctx context.Context, metadata adapter.InboundContext, network string, tried map[string]bool) (adapter.Outbound, error) {
++	for {
++		if err := ctx.Err(); err != nil {
++			return nil, err
++		}
++		s.mu.Lock()
++		selected := s.selectLocked(metadata, network, true, tried)
++		changed := s.changed
++		s.mu.Unlock()
++		if selected != nil {
++			return selected, nil
++		}
++		// Health updates are debounced. A backup's successful test may already
++		// be complete while its group notification is still pending. Wait within
++		// the caller's budget; never retry a node already tried by this request.
++		select {
++		case <-ctx.Done():
++			return nil, ctx.Err()
++		case <-changed:
++		}
++	}
++}
++
++func (s *healthyStrategy) Now() string {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	if s.strategy == nil {
++		return ""
++	}
++	return s.strategy.Now()
++}
++
++// Shared by TCP and packet establishment. Never replay application bytes or
++// migrate an existing connection after its transport has been established.
++func establish[T any](ctx context.Context, strategy *healthyStrategy, metadata adapter.InboundContext, network string,
++	dial func(context.Context, adapter.Outbound) (T, error), failed func(string)) (T, error) {
++	var zero T
++	ctx, cancel := context.WithTimeout(ctx, connectionBudget)
++	defer cancel()
++	tried := make(map[string]bool, connectionAttempts)
++	var lastErr error
++	for attempt := 0; attempt < connectionAttempts; attempt++ {
++		out, err := strategy.wait(ctx, metadata, network, tried)
++		if err != nil {
++			if lastErr != nil && ctx.Err() == nil {
++				return zero, lastErr
++			}
++			return zero, err
++		}
++		tried[out.Tag()] = true
++		attemptCtx, stop := context.WithTimeout(ctx, attemptBudget)
++		result, err := dial(attemptCtx, out)
++		stop()
++		if err == nil {
++			return result, nil
++		}
++		lastErr = err
++		if ctx.Err() != nil {
++			return zero, ctx.Err()
++		}
++		strategy.fail(out.Tag())
++		if failed != nil {
++			failed(out.Tag())
++		}
++	}
++	return zero, lastErr
++}
++
++var _ Strategy = (*healthyStrategy)(nil)
+--- /dev/null
++++ b/hiddify-sing-box/protocol/group/balancer/healthy_strategy_test.go
+@@ -0,0 +1,174 @@
++package balancer
++
++import (
++	"context"
++	"errors"
++	"reflect"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/sagernet/sing-box/adapter"
++	"github.com/sagernet/sing-box/common/monitoring"
++	"github.com/sagernet/sing-box/option"
++)
++
++type testOutbound struct {
++	adapter.Outbound
++	tag      string
++	networks []string
++}
++
++func (o testOutbound) Tag() string { return o.tag }
++func (o testOutbound) Network() []string {
++	if o.networks == nil {
++		return []string{"tcp", "udp"}
++	}
++	return o.networks
++}
++func successful(delay uint16) *adapter.URLTestHistory {
++	return &adapter.URLTestHistory{Delay: delay, Time: time.Now()}
++}
++func pool(strategy string, tags ...string) *healthyStrategy {
++	outs := make([]adapter.Outbound, len(tags))
++	for i, tag := range tags {
++		outs[i] = testOutbound{tag: tag}
++	}
++	return newHealthyStrategy(outs, option.BalancerOutboundOptions{Strategy: strategy, Tolerance: 50})
++}
++
++func TestProxyYouOnlyFreshHealthyServers(t *testing.T) {
++	for _, strategy := range []string{StrategyLowestDelay, StrategyRoundRobin, StrategyConsistentHashing, StrategyStickySessions} {
++		t.Run(strategy, func(t *testing.T) {
++			s := pool(strategy, "unknown", "failed", "cached", "healthy")
++			if s.Select(adapter.InboundContext{}, "tcp", true) != nil {
++				t.Fatal("cold start selected an untested node")
++			}
++			cached := successful(1)
++			cached.IsFromCache = true
++			s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"failed": successful(monitoring.TimeoutDelay), "cached": cached, "healthy": successful(20)})
++			for i := 0; i < 100; i++ {
++				out := s.Select(adapter.InboundContext{}, "tcp", true)
++				if out == nil || out.Tag() != "healthy" {
++					t.Fatalf("selected unhealthy node: %v", out)
++				}
++			}
++			s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"failed": successful(monitoring.TimeoutDelay)})
++			if s.Select(adapter.InboundContext{}, "tcp", true) != nil {
++				t.Fatal("all-failed group selected a node")
++			}
++		})
++	}
++}
++
++func TestProxyYouEstablishmentRetriesDifferentNodes(t *testing.T) {
++	s := pool(StrategyLowestDelay, "a", "b", "c", "d")
++	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": successful(1), "b": successful(100), "c": successful(200), "d": successful(300)})
++	var attempts, invalidated []string
++	result, err := establish(context.Background(), s, adapter.InboundContext{}, "tcp", func(ctx context.Context, out adapter.Outbound) (string, error) {
++		attempts = append(attempts, out.Tag())
++		if out.Tag() == "b" {
++			return "connected", nil
++		}
++		return "", errors.New("refused")
++	}, func(tag string) { invalidated = append(invalidated, tag) })
++	if err != nil || result != "connected" || !reflect.DeepEqual(attempts, []string{"a", "b"}) || !reflect.DeepEqual(invalidated, []string{"a"}) {
++		t.Fatalf("%q %v %v %v", result, err, attempts, invalidated)
++	}
++}
++
++func TestProxyYouRetryLimit(t *testing.T) {
++	s := pool(StrategyLowestDelay, "a", "b", "c", "d")
++	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": successful(1), "b": successful(100), "c": successful(200), "d": successful(300)})
++	var attempts []string
++	_, err := establish(context.Background(), s, adapter.InboundContext{}, "udp", func(ctx context.Context, out adapter.Outbound) (int, error) {
++		attempts = append(attempts, out.Tag())
++		return 0, errors.New("refused")
++	}, nil)
++	if err == nil || !reflect.DeepEqual(attempts, []string{"a", "b", "c"}) {
++		t.Fatalf("retry limit: %v %v", attempts, err)
++	}
++}
++
++func TestProxyYouCancellationDoesNotInvalidateServer(t *testing.T) {
++	s := pool(StrategyLowestDelay, "a")
++	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": successful(20)})
++	ctx, cancel := context.WithCancel(context.Background())
++	invalidations := 0
++	_, err := establish(ctx, s, adapter.InboundContext{}, "tcp", func(ctx context.Context, out adapter.Outbound) (int, error) { cancel(); return 0, ctx.Err() }, func(string) { invalidations++ })
++	if !errors.Is(err, context.Canceled) || invalidations != 0 || len(s.failed) != 0 {
++		t.Fatalf("cancel blacklisted a healthy server: %v %d", err, invalidations)
++	}
++}
++
++func TestProxyYouColdStartWaitsAndHonorsDeadline(t *testing.T) {
++	s := pool(StrategyLowestDelay, "a")
++	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
++	defer cancel()
++	_, err := establish(ctx, s, adapter.InboundContext{}, "tcp", func(context.Context, adapter.Outbound) (int, error) { t.Fatal("untested node dialed"); return 0, nil }, nil)
++	if !errors.Is(err, context.DeadlineExceeded) {
++		t.Fatal(err)
++	}
++	go func() {
++		time.Sleep(10 * time.Millisecond)
++		s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": successful(20)})
++	}()
++	ctx2, stop := context.WithTimeout(context.Background(), time.Second)
++	defer stop()
++	result, err := establish(ctx2, s, adapter.InboundContext{}, "tcp", func(context.Context, adapter.Outbound) (int, error) { return 42, nil }, nil)
++	if err != nil || result != 42 {
++		t.Fatalf("cold start did not resume: %d %v", result, err)
++	}
++}
++
++func TestProxyYouFailedServerNeedsNewSuccessfulTest(t *testing.T) {
++	s := pool(StrategyLowestDelay, "a")
++	old := successful(10)
++	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": old})
++	s.fail("a")
++	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": old})
++	if s.Select(adapter.InboundContext{}, "tcp", true) != nil {
++		t.Fatal("old success removed cooldown")
++	}
++	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": successful(10)})
++	if s.Select(adapter.InboundContext{}, "tcp", true) == nil {
++		t.Fatal("new success did not recover server")
++	}
++}
++
++func TestProxyYouUnsupportedNetworkIsNotSelected(t *testing.T) {
++	s := newHealthyStrategy([]adapter.Outbound{testOutbound{tag: "tcp-only", networks: []string{"tcp"}}}, option.BalancerOutboundOptions{Strategy: StrategyLowestDelay})
++	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"tcp-only": successful(10)})
++	if s.Select(adapter.InboundContext{}, "udp", true) != nil {
++		t.Fatal("TCP-only node selected for UDP")
++	}
++}
++
++func TestProxyYouLowestAvoidsSmallDelayFluctuations(t *testing.T) {
++	s := pool(StrategyLowestDelay, "a", "b")
++	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": successful(100), "b": successful(90)})
++	if s.Now() != "a" {
++		t.Fatal("small improvement caused route flapping")
++	}
++	s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": successful(100), "b": successful(20)})
++	if s.Now() != "b" {
++		t.Fatal("substantial improvement did not switch")
++	}
++}
++
++func TestProxyYouConcurrentSelectionAndHealthUpdates(t *testing.T) {
++	s := pool(StrategyRoundRobin, "a", "b")
++	var wg sync.WaitGroup
++	for worker := 0; worker < 8; worker++ {
++		wg.Add(1)
++		go func() {
++			defer wg.Done()
++			for i := 0; i < 100; i++ {
++				s.UpdateOutboundsInfo(map[string]*adapter.URLTestHistory{"a": successful(10), "b": successful(20)})
++				s.Select(adapter.InboundContext{}, "tcp", true)
++				s.Now()
++			}
++		}()
++	}
++	wg.Wait()
++}
+--- /dev/null
++++ b/hiddify-sing-box/common/dialer/ipv6_availability.go
+@@ -0,0 +1,54 @@
++package dialer
++
++import (
++	"net/netip"
++
++	"github.com/sagernet/sing-box/adapter"
++)
++
++// Inspect the physical default interface on every resolution. A VPN's own
++// synthetic IPv6 address must not be interpreted as upstream IPv6 support.
++// Missing interface information is unknown, not evidence of an IPv4-only link.
++func interfaceIPv6Available(networkInterface *adapter.NetworkInterface) (available, known bool) {
++	if networkInterface == nil || len(networkInterface.Addresses) == 0 {
++		return false, false
++	}
++	for _, prefix := range networkInterface.Addresses {
++		address := prefix.Addr()
++		if address.Is6() && !address.Is4In6() && address.IsGlobalUnicast() {
++			return true, true
++		}
++	}
++	return false, true
++}
++
++func (d *DefaultDialer) filterDestinationAddresses(addresses []netip.Addr) []netip.Addr {
++	if d.networkManager == nil || d.explicitInterface || len(d.networkType) > 0 || len(d.fallbackNetworkType) > 0 {
++		return addresses
++	}
++	if d.networkManager.DefaultOptions().BindInterface != "" {
++		return addresses
++	}
++	available, known := interfaceIPv6Available(d.networkManager.DefaultNetworkInterface())
++	if !known || available {
++		return addresses
++	}
++	filtered := make([]netip.Addr, 0, len(addresses))
++	for _, address := range addresses {
++		if !address.Is6() || address.Is4In6() || address.IsLoopback() {
++			filtered = append(filtered, address)
++		}
++	}
++	return filtered
++}
++
++func (d *resolveDialer) usableAddresses(addresses []netip.Addr) []netip.Addr {
++	// This capability exists only on a local socket dialer. Never filter remote
++	// destinations forwarded through another proxy, which may have IPv6 itself.
++	if local, ok := d.dialer.(interface {
++		filterDestinationAddresses([]netip.Addr) []netip.Addr
++	}); ok {
++		return local.filterDestinationAddresses(addresses)
++	}
++	return addresses
++}
+--- /dev/null
++++ b/hiddify-sing-box/common/dialer/ipv6_availability_test.go
+@@ -0,0 +1,69 @@
++package dialer
++
++import (
++	"net/netip"
++	"reflect"
++	"testing"
++
++	"github.com/sagernet/sing-box/adapter"
++	"github.com/sagernet/sing/common/control"
++)
++
++type testNetworkManager struct {
++	adapter.NetworkManager
++	current *adapter.NetworkInterface
++}
++
++func (m *testNetworkManager) DefaultOptions() adapter.NetworkOptions { return adapter.NetworkOptions{} }
++
++func (m *testNetworkManager) DefaultNetworkInterface() *adapter.NetworkInterface { return m.current }
++func physical(prefixes ...string) *adapter.NetworkInterface {
++	n := &adapter.NetworkInterface{Interface: control.Interface{Name: "physical"}}
++	for _, prefix := range prefixes {
++		n.Addresses = append(n.Addresses, netip.MustParsePrefix(prefix))
++	}
++	return n
++}
++
++func TestProxyYouPhysicalIPv6Availability(t *testing.T) {
++	for _, tc := range []struct {
++		name             string
++		n                *adapter.NetworkInterface
++		available, known bool
++	}{
++		{"unknown", nil, false, false}, {"no-addresses", physical(), false, false},
++		{"ipv4-only", physical("192.0.2.5/24"), false, true},
++		{"link-local-only", physical("192.0.2.5/24", "fe80::1/64"), false, true},
++		{"dual-stack", physical("192.0.2.5/24", "2001:db8::5/64"), true, true},
++		{"ipv6-only-nat64", physical("2001:db8::5/64"), true, true},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			a, k := interfaceIPv6Available(tc.n)
++			if a != tc.available || k != tc.known {
++				t.Fatalf("%v %v", a, k)
++			}
++		})
++	}
++}
++
++func TestProxyYouIPv6FilteringTracksNetworkChanges(t *testing.T) {
++	addresses := []netip.Addr{netip.MustParseAddr("2001:db8::1"), netip.MustParseAddr("192.0.2.1")}
++	m := &testNetworkManager{current: physical("192.0.2.5/24")}
++	d := &DefaultDialer{networkManager: m}
++	if got := d.filterDestinationAddresses(addresses); !reflect.DeepEqual(got, addresses[1:]) {
++		t.Fatal(got)
++	}
++	m.current = physical("2001:db8::5/64")
++	if got := d.filterDestinationAddresses(addresses); !reflect.DeepEqual(got, addresses) {
++		t.Fatal("IPv6 did not recover", got)
++	}
++	m.current = nil
++	if got := d.filterDestinationAddresses(addresses); !reflect.DeepEqual(got, addresses) {
++		t.Fatal("unknown network discarded IPv6", got)
++	}
++	m.current = physical("192.0.2.5/24")
++	d.explicitInterface = true
++	if got := d.filterDestinationAddresses(addresses); !reflect.DeepEqual(got, addresses) {
++		t.Fatal("explicit interface ignored", got)
++	}
++}
+--- /dev/null
++++ b/hiddify-sing-box/common/monitoring/proxyyou_stability_test.go
+@@ -0,0 +1,20 @@
++package monitoring
++
++import (
++	"testing"
++	"time"
++
++	"github.com/sagernet/sing-box/adapter"
++)
++
++func TestProxyYouRevalidatesRecentCacheBeforeUnknownNodes(t *testing.T) {
++	m := &OutboundMonitoring{mainInterval: time.Minute, groups: map[string]*groupState{}, outbounds: map[string]*outboundState{
++		"unknown":     {history: adapter.URLTestHistory{}, invalid: true},
++		"cached-good": {history: adapter.URLTestHistory{Time: time.Now(), Delay: 20}, from_cache: true},
++		"failed":      {history: adapter.URLTestHistory{Time: time.Now(), Delay: TimeoutDelay}, invalid: true},
++	}}
++	tags := m.collectCycleTargets()
++	if len(tags) != 3 || tags[0] != "cached-good" {
++		t.Fatalf("cached working node must be rechecked first: %v", tags)
++	}
++}
+--- /dev/null
++++ b/v2/config/proxyyou_stability_test.go
+@@ -0,0 +1,38 @@
++package config
++
++import (
++	"testing"
++
++	C "github.com/sagernet/sing-box/constant"
++	"github.com/sagernet/sing-box/option"
++)
++
++func TestProxyYouStableDNSStrategyPreservesExplicitChoices(t *testing.T) {
++	for _, tc := range []struct{ mode, explicit, want C.DomainStrategy }{
++		{C.DomainStrategyAsIS, C.DomainStrategyAsIS, C.DomainStrategyPreferIPv4},
++		{C.DomainStrategyIPv4Only, C.DomainStrategyAsIS, C.DomainStrategyIPv4Only},
++		{C.DomainStrategyIPv6Only, C.DomainStrategyAsIS, C.DomainStrategyIPv6Only},
++		{C.DomainStrategyPreferIPv4, C.DomainStrategyPreferIPv6, C.DomainStrategyPreferIPv6},
++	} {
++		if got := stableDNSStrategy(option.DomainStrategy(tc.mode), option.DomainStrategy(tc.explicit)); got != option.DomainStrategy(tc.want) {
++			t.Fatalf("%v %v: %v", tc.mode, tc.explicit, got)
++		}
++	}
++}
++
++func TestProxyYouDNSCacheHonorsTTL(t *testing.T) {
++	options := &option.Options{}
++	ips := map[string][]string{}
++	if err := setDns(options, DefaultHiddifyOptions(), &ips); err != nil {
++		t.Fatal(err)
++	}
++	if options.DNS.DisableExpire {
++		t.Fatal("expired DNS entries must not remain indefinitely")
++	}
++	if DEFAULT_DNS_TTL != 300 {
++		t.Fatalf("bootstrap TTL: %d", DEFAULT_DNS_TTL)
++	}
++	if DefaultHiddifyOptions().MTU != 1400 {
++		t.Fatal("unsafe default TUN MTU")
++	}
++}
+--- /dev/null
++++ b/continuitycheck/failover_test.go
+@@ -0,0 +1,100 @@
++package continuitycheck
++
++import (
++	"context"
++	"net"
++	"testing"
++	"time"
++
++	box "github.com/sagernet/sing-box"
++	"github.com/sagernet/sing-box/adapter"
++	"github.com/sagernet/sing-box/adapter/outbound"
++	"github.com/sagernet/sing-box/common/interrupt"
++	"github.com/sagernet/sing-box/common/monitoring"
++	"github.com/sagernet/sing-box/include"
++	"github.com/sagernet/sing-box/log"
++	"github.com/sagernet/sing-box/option"
++	"github.com/sagernet/sing/common/json/badoption"
++	M "github.com/sagernet/sing/common/metadata"
++)
++
++func TestNativeAutomaticEstablishmentFailover(t *testing.T) {
++	for _, strategy := range []string{"lowest-delay", "round-robin", "consistent-hashing", "sticky-sessions"} {
++		t.Run(strategy, func(t *testing.T) {
++			health, cert := healthServer(t)
++			a, b := newEndpoint(t, "a", health), newEndpoint(t, "b", health)
++			a.delay.Store(20)
++			b.delay.Store(400)
++			registry := include.OutboundRegistry()
++			var nativeCtx context.Context
++			outbound.Register[struct{}](registry, "continuity-test", func(ctx context.Context, _ adapter.Router, _ log.ContextLogger, tag string, _ struct{}) (adapter.Outbound, error) {
++				nativeCtx = ctx
++				if tag == "a" {
++					return a, nil
++				}
++				return b, nil
++			})
++			ctx := box.Context(context.Background(), include.InboundRegistry(), registry, include.EndpointRegistry(), include.DNSTransportRegistry(), include.ServiceRegistry())
++			instance, err := box.New(box.Options{Context: ctx, Options: option.Options{
++				Log: &option.LogOptions{Disabled: true}, Certificate: &option.CertificateOptions{Store: "none", Certificate: []string{cert}},
++				Route:        &option.RouteOptions{Final: "automatic"},
++				Experimental: &option.ExperimentalOptions{Monitoring: &option.MonitoringOptions{Interval: badoption.Duration(time.Hour), URLTestTimeout: badoption.Duration(2 * time.Second), DebounceWindow: badoption.Duration(10 * time.Millisecond)}},
++				Outbounds: []option.Outbound{
++					{Type: "balancer", Tag: "automatic", Options: &option.BalancerOutboundOptions{Outbounds: []string{"a", "b"}, Strategy: strategy, DelayAcceptableRatio: 1}},
++					{Type: "continuity-test", Tag: "a", Options: &struct{}{}}, {Type: "continuity-test", Tag: "b", Options: &struct{}{}},
++				},
++			}})
++			if err != nil {
++				t.Fatal(err)
++			}
++			if err = instance.Start(); err != nil {
++				instance.Close()
++				t.Fatal(err)
++			}
++			t.Cleanup(func() { instance.Close() })
++			monitor := monitoring.Get(nativeCtx)
++			deadline := time.Now().Add(5 * time.Second)
++			for {
++				h := monitor.OutboundsHistory("automatic")
++				if h["a"] != nil && h["b"] != nil && h["a"].Delay > 0 && h["b"].Delay > 0 && h["b"].Delay < 65535 {
++					break
++				}
++				if time.Now().After(deadline) {
++					t.Fatal("health tests not completed")
++				}
++				time.Sleep(10 * time.Millisecond)
++			}
++			out, _ := instance.Outbound().Outbound("automatic")
++			traffic := interrupt.ContextWithIsExternalConnection(context.Background())
++			dest := M.ParseSocksaddr("127.0.0.1:9")
++			old, err := out.DialContext(traffic, "tcp", dest)
++			if err != nil {
++				t.Fatal(err)
++			}
++			defer old.Close()
++			if tag, err := readTag(old); err != nil || tag != "a" {
++				t.Fatalf("initial TCP: %s %v", tag, err)
++			}
++			a.failTCP.Store(true)
++			a.failUDP.Store(true)
++			// Exercise the actual inbound handler, not only the direct DialContext API.
++			client, server := net.Pipe()
++			defer client.Close()
++			go out.(adapter.ConnectionHandlerEx).NewConnectionEx(traffic, server, adapter.InboundContext{Network: "tcp", Destination: dest}, nil)
++			if tag, err := readTag(client); err != nil || tag != "b" {
++				t.Fatalf("inbound TCP did not fail over: %s %v", tag, err)
++			}
++			if err := exchangeTCP(old); err != nil {
++				t.Fatalf("retry interrupted established TCP: %v", err)
++			}
++			packet, err := out.ListenPacket(traffic, dest)
++			if err != nil {
++				t.Fatal(err)
++			}
++			defer packet.Close()
++			if tag, err := exchangeUDP(packet); err != nil || tag != "b" {
++				t.Fatalf("packet establishment did not fail over: %s %v", tag, err)
++			}
++		})
++	}
++}

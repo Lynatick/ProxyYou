@@ -13,6 +13,7 @@ fi
 if grep -q "InterruptExistConnections: true," "$source_dir/v2/config/builder.go"; then
   patch -d "$source_dir" -p1 < "$root/native-patches/connection-continuity.patch"
 fi
+bash "$root/scripts/apply-native-stability.sh" "$source_dir"
 out="$root/hiddify-core/windows-x64"
 mkdir -p "$out"
 tags=with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,with_grpc,with_awg,tfogo_checklinkname0,with_naive_outbound,with_conntrack,with_purego
@@ -26,3 +27,5 @@ CGO_LDFLAGS="$out/hiddify-core.dll" go -C "$source_dir" build -trimpath \
 cronet="$(CGO_ENABLED=0 go -C "$source_dir" list -m -f '{{.Dir}}' github.com/sagernet/cronet-go/lib/windows_amd64)"
 cp "$cronet/libcronet.dll" "$out/libcronet.dll"
 echo "Windows x64 native core saved to $out"
+
+python3 "$root/scripts/native-core-stamp.py" write "$out/hiddify-core.dll"
