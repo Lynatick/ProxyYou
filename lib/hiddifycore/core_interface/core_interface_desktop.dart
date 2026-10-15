@@ -8,7 +8,9 @@ import 'package:hiddify/core/model/directories.dart';
 import 'package:hiddify/gen/hiddify_core_generated_bindings.dart';
 import 'package:hiddify/hiddifycore/core_interface/core_interface.dart';
 import 'package:hiddify/hiddifycore/core_interface/responsive_core_client.dart';
+import 'package:hiddify/hiddifycore/generated/v2/hcommon/common.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore.pb.dart';
+import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore_service.pbgrpc.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hello/hello.pb.dart';
 import 'package:hiddify/hiddifycore/generated/v2/hello/hello_service.pbgrpc.dart';
 import 'package:hiddify/utils/custom_loggers.dart';
@@ -53,6 +55,24 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
   }
 
   final port = 17078;
+
+  @override
+  Future<CoreInfoResponse> readFreshStatus() async {
+    // Do not reuse the HTTP/2 connection whose Stop reply was lost.
+    final channel = ClientChannel(
+      '127.0.0.1',
+      port: _windowsPort ?? port,
+      options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+    );
+    try {
+      return await CoreClient(channel)
+          .coreInfoListener(Empty(), options: CallOptions(timeout: const Duration(seconds: 2)))
+          .first;
+    } finally {
+      await channel.shutdown();
+    }
+  }
+
   int? _windowsPort;
   Future<String>? _windowsSetup;
   static String generateRandomPassword(int length) {
