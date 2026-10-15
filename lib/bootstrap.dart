@@ -37,6 +37,32 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
   if (!kIsWeb) {
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   }
+  try {
+    await _bootstrap(env);
+  } catch (error, stackTrace) {
+    Logger.bootstrap.error("application startup failed", error, stackTrace);
+    runApp(
+      const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'Не удалось запустить ProxyYou.\nПолностью закройте приложение и откройте его снова.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  } finally {
+    if (!kIsWeb) FlutterNativeSplash.remove();
+  }
+}
+
+Future<void> _bootstrap(Environment env) async {
   // phase 1 — console and the in-memory history, before the folders are known
   logStart();
   FlutterError.onError = Logger.logFlutterError;
@@ -106,15 +132,7 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
 
   await _init("translations", () => container.read(translationsProvider.future));
 
-  await _safeInit("active profile", () => container.read(activeProfileProvider.future), timeout: 1000);
-  await _init(
-    "chain profile extra security",
-    () => container.read(chainProfileNotifierProvider(ChainType.extraSecurity).future),
-  );
-  await _init(
-    "chain profile unblocker",
-    () => container.read(chainProfileNotifierProvider(ChainType.unblocker).future),
-  );
+  await _init("startup profiles", () => initializeStartupProfiles(container));
   await _safeInit("hiddify-core", () => container.read(hiddifyCoreServiceProvider).init());
 
   // Eagerly listen to activeProxyNotifierProvider to force synchronous evaluation in microtasks,
@@ -148,10 +166,24 @@ Future<void> lazyBootstrap(WidgetsBinding widgetsBinding, Environment env) async
     ),
   );
 
-  if (!kIsWeb) {
-    FlutterNativeSplash.remove();
-  }
   // SentryFlutter.s(DateTime.now().toUtc());
+}
+
+/// Keep profile streams active before the first frame and while the window is hidden.
+/// Reading only `.future` closes its temporary listener in Riverpod 3 and can
+/// pause the stream before it delivers even the empty-database result.
+Future<void> initializeStartupProfiles(
+  ProviderContainer container, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  container.listen(activeProfileProvider, (previous, next) {});
+  for (final type in ChainType.values) {
+    container.listen(chainProfileNotifierProvider(type), (previous, next) {});
+  }
+  await Future.wait([
+    container.read(activeProfileProvider.future),
+    for (final type in ChainType.values) container.read(chainProfileNotifierProvider(type).future),
+  ]).timeout(timeout);
 }
 
 Future<T> _init<T>(String name, Future<T> Function() initializer, {int? timeout}) async {
