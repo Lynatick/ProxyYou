@@ -74,11 +74,14 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
   Future<void> changeProxy(String groupTag, String outboundTag) async {
     loggy.debug("changing proxy, group: [$groupTag] - outbound: [$outboundTag]");
     if (!state.hasValue) return;
+    final repository = ref.read(proxyRepositoryProvider);
     await ref.read(hapticServiceProvider.notifier).lightImpact();
-    await ref.read(proxyRepositoryProvider).selectProxy(groupTag, outboundTag).getOrElse((err) {
+    await repository.selectProxy(groupTag, outboundTag).getOrElse((err) {
       loggy.warning("error selecting outbound", err);
       throw err;
     }).run();
+    // The user may have left the list or disconnected while the RPC ran.
+    if (!ref.mounted) return;
     final outbounds = state.value;
     if (outbounds == null || outbounds.tag != groupTag) return;
     final newselected = outbounds.items.where((e) => e.tag == outboundTag).firstOrNull;
@@ -99,8 +102,9 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
   Future<void> urlTest(String groupTag) async {
     loggy.debug("testing group: [$groupTag]");
     if (state case AsyncData()) {
+      final repository = ref.read(proxyRepositoryProvider);
       await ref.read(hapticServiceProvider.notifier).lightImpact();
-      await ref.read(proxyRepositoryProvider).urlTest(groupTag).getOrElse((err) {
+      await repository.urlTest(groupTag).getOrElse((err) {
         loggy.error("error testing group", err);
         throw err;
       }).run();

@@ -17,14 +17,23 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 part 'active_proxy_notifier.g.dart';
 
-// mainOutboundsInfo returns the selected route from group to actual server.
-// Use the leaf's delay rather than a selector/balancer's cached aggregate delay.
+// The native snapshot includes the selection of every group, including groups
+// outside the active route. Follow only the main selector's selected path.
 OutboundInfo connectedOutbound(List<OutboundGroup> groups) {
-  for (final group in groups.reversed) {
-    final server = group.items.where((item) => !item.isGroup).firstOrNull;
-    if (server != null) return server;
+  final byTag = {for (final group in groups) group.tag: group};
+  var group = byTag['select'] ?? groups.firstOrNull;
+  final visited = <String>{};
+  while (group != null && visited.add(group.tag)) {
+    final selectedTag = group.selected;
+    final selected = selectedTag.isNotEmpty
+        ? group.items.where((item) => item.tag == selectedTag).firstOrNull
+        : group.items.where((item) => item.isSelected).firstOrNull ??
+              (group.items.length == 1 ? group.items.first : null);
+    if (selected == null) return OutboundInfo();
+    if (!selected.isGroup) return selected;
+    group = byTag[selected.tag];
   }
-  return groups.firstOrNull?.items.firstOrNull ?? OutboundInfo();
+  return OutboundInfo();
 }
 
 // One native stream is shared by the selected server and the routing-mode label.
