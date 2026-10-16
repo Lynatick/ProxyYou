@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
-import 'package:hiddify/features/youtube/windows_playback_dialog.dart';
 import 'package:hiddify/features/youtube/youtube_playback.dart';
 import 'package:hiddify/features/youtube/youtube_probe.dart';
 import 'package:hiddify/features/youtube/youtube_provider.dart';
-import 'package:hiddify/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class YoutubeCard extends ConsumerWidget {
@@ -16,7 +14,8 @@ class YoutubeCard extends ConsumerWidget {
     final running = ref.watch(serviceRunningProvider);
     final enabled = ref.watch(ConfigOptions.enableMixedPort);
     final report = ref.watch(youtubeReportProvider);
-    final playback = ref.watch(youtubePlaybackProvider);
+    final playbackSupported = ref.watch(youtubePlaybackSupportedProvider);
+    final playback = playbackSupported ? ref.watch(youtubePlaybackProvider) : null;
     final theme = Theme.of(context);
     return Card(
       child: Padding(
@@ -84,10 +83,10 @@ class YoutubeCard extends ConsumerWidget {
                             ),
                           if (value.checks.any((check) => check.outcome == ProbeOutcome.tlsFailure)) ...[
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                               'Не удалось установить защищённое соединение через выбранный сервер. '
-                              'Попробуйте другой сервер или проверку воспроизведения ниже. '
-                              'Предварительная ошибка не определяет доступность видео.',
+                              '${playbackSupported ? 'Попробуйте другой сервер или проверку воспроизведения ниже. ' : 'Попробуйте другой сервер. '}'
+                              'Сетевая проверка не подтверждает воспроизведение видео.',
                             ),
                           ],
                           Text(
@@ -97,36 +96,31 @@ class YoutubeCard extends ConsumerWidget {
                         ],
                       ),
               ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: running && enabled && playback.status != PlaybackStatus.checking
-                  ? () => ref
-                        .read(youtubePlaybackProvider.notifier)
-                        .start(
-                          playbackRunner: PlatformUtils.isWindows
-                              ? (arguments) => showWindowsPlayback(context, arguments)
-                              : null,
-                        )
-                  : null,
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Проверить воспроизведение'),
-            ),
-            const SizedBox(height: 8),
-            Text(switch (playback.status) {
-              PlaybackStatus.passed =>
-                'Воспроизведение подтверждено: ${playback.seconds.toStringAsFixed(1)} с, ${playback.frames} кадров',
-              PlaybackStatus.checking => 'Нажмите Play в открывшемся плеере. Проверяем реальные кадры…',
-              PlaybackStatus.failed => 'Воспроизведение не подтверждено. Повторите проверку.',
-              PlaybackStatus.unsupported =>
-                'Для проверки нужен поддерживаемый видеоплеер. На Windows установите Microsoft Edge WebView2 Runtime.',
-              PlaybackStatus.cancelled => 'Проверка отменена.',
-              PlaybackStatus.idle => 'Успех требует минимум 5 секунд воспроизведения с декодированными кадрами.',
-            }),
-            const SizedBox(height: 12),
-            Text(
-              'Проверяется тестовое видео. Результат относится к текущему соединению; другие видео могут иметь ограничения.',
-              style: theme.textTheme.bodySmall,
-            ),
+            if (playback != null) ...[
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: running && enabled && playback.status != PlaybackStatus.checking
+                    ? () => ref.read(youtubePlaybackProvider.notifier).start()
+                    : null,
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('Проверить воспроизведение'),
+              ),
+              const SizedBox(height: 8),
+              Text(switch (playback.status) {
+                PlaybackStatus.passed =>
+                  'Воспроизведение подтверждено: ${playback.seconds.toStringAsFixed(1)} с, ${playback.frames} кадров',
+                PlaybackStatus.checking => 'Нажмите Play в открывшемся плеере. Проверяем реальные кадры…',
+                PlaybackStatus.failed => 'Воспроизведение не подтверждено. Повторите проверку.',
+                PlaybackStatus.unsupported => 'Для проверки нужен поддерживаемый видеоплеер.',
+                PlaybackStatus.cancelled => 'Проверка отменена.',
+                PlaybackStatus.idle => 'Успех требует минимум 5 секунд воспроизведения с декодированными кадрами.',
+              }),
+              const SizedBox(height: 12),
+              Text(
+                'Проверяется тестовое видео. Результат относится к текущему соединению; другие видео могут иметь ограничения.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
           ],
         ),
       ),

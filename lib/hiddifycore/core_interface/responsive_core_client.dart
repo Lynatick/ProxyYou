@@ -16,7 +16,7 @@ class ResponsiveCoreClient extends CoreClient {
   final CoreClient? _control;
 
   // A paused/large outbound stream must not hold up Start, Stop or settings on
-  // the same HTTP/2 connection. Desktop macOS supplies a separate control lane.
+  // the same HTTP/2 connection. Each platform supplies a separate control lane.
   @override
   ResponseFuture<R> $createUnaryCall<Q, R>(ClientMethod<Q, R> method, Q request, {CallOptions? options}) =>
       _control?.$createUnaryCall(method, request, options: options) ??
