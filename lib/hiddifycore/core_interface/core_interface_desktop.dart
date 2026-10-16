@@ -135,6 +135,8 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
       loggy.info(res.toString());
     }
     bgClient = fgClient = ResponsiveCoreClient(
+      // Subscription and statistics streams can remain paused off screen.
+      // macOS control RPCs need their own connection throughout the session.
       ClientChannel(
         'localhost',
         port: port,
@@ -146,6 +148,13 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
           // ),
         ),
       ),
+      controlChannel: Platform.isMacOS
+          ? ClientChannel(
+              '127.0.0.1',
+              port: port,
+              options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+            )
+          : null,
     );
 
     return "";

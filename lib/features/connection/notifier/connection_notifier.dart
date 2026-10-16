@@ -164,6 +164,8 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
       loggy.info("no active profile, not connecting");
       return;
     }
+    // Applying settings is part of connecting, even before the native Start RPC.
+    state = const AsyncData(Connecting());
     await _connectionRepo.connect(activeProfile, ref.read(Preferences.disableMemoryLimit)).mapLeft((
       ConnectionFailure err,
     ) async {

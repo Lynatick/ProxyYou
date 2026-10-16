@@ -34,6 +34,7 @@ class LifecycleRepository implements ConnectionRepository {
   final statuses = BehaviorSubject<ConnectionStatus>.seeded(const Disconnected());
   final actions = <String>[];
   void Function()? onStarted;
+  void Function()? onConnecting;
 
   @override
   SingboxConfigOption? get configOptionsSnapshot => null;
@@ -47,6 +48,7 @@ class LifecycleRepository implements ConnectionRepository {
   @override
   TaskEither<ConnectionFailure, Unit> connect(ProfileEntity profile, bool disableMemoryLimit) => TaskEither(() async {
     actions.add('connect');
+    onConnecting?.call();
     statuses.add(const Connecting());
     statuses.add(const Connected());
     onStarted?.call();
@@ -96,6 +98,7 @@ void main() {
         repository.onStarted = () => container.read(coreRestartSignalProvider.notifier).restart();
       }
       final notifier = container.read(connectionNotifierProvider.notifier);
+      repository.onConnecting = () => expect(container.read(connectionNotifierProvider).value, const Connecting());
       for (var cycle = 0; cycle < 3; cycle++) {
         await notifier.toggleConnection().timeout(const Duration(seconds: 2));
         await container.pump();
