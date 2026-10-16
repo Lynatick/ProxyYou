@@ -171,24 +171,28 @@ class HiddifyCoreService with InfraLogger {
               'connection-test-urls': [youtubeTestUrl],
             }),
           ),
+          options: CallOptions(timeout: const Duration(seconds: 10)),
         );
         if (res.messageType != MessageType.EMPTY) return left("${res.messageType} ${res.message}");
-        await core.bgClient.changeHiddifySettings(
-          ChangeHiddifySettingsRequest(
-            hiddifySettingsJson: jsonEncode({
-              ...coreOptions.toJson(),
-              if (PlatformUtils.isMacOS)
-                'proxyyou-app-routing': {
-                  'enabled': ref.read(MacAppPreferences.enabled),
-                  'mode': ref.read(MacAppPreferences.mode),
-                  'bundles': ref.read(MacAppPreferences.bundles),
-                  'diagnostic_port': ref.read(macDiagnosticPortProvider),
-                },
-              'connection-test-url': youtubeTestUrl,
-              'connection-test-urls': [youtubeTestUrl],
-            }),
-          ),
-        );
+        if (!core.isSingleChannel()) {
+          await core.bgClient.changeHiddifySettings(
+            ChangeHiddifySettingsRequest(
+              hiddifySettingsJson: jsonEncode({
+                ...coreOptions.toJson(),
+                if (PlatformUtils.isMacOS)
+                  'proxyyou-app-routing': {
+                    'enabled': ref.read(MacAppPreferences.enabled),
+                    'mode': ref.read(MacAppPreferences.mode),
+                    'bundles': ref.read(MacAppPreferences.bundles),
+                    'diagnostic_port': ref.read(macDiagnosticPortProvider),
+                  },
+                'connection-test-url': youtubeTestUrl,
+                'connection-test-urls': [youtubeTestUrl],
+              }),
+            ),
+            options: CallOptions(timeout: const Duration(seconds: 10)),
+          );
+        }
       } on GrpcError catch (e) {
         if (e.code == StatusCode.unavailable) {
           loggy.debug("background core is not started yet! $e");

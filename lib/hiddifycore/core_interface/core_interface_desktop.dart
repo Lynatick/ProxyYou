@@ -135,6 +135,8 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
       loggy.info(res.toString());
     }
     bgClient = fgClient = ResponsiveCoreClient(
+      // Subscription and statistics streams can remain paused off screen.
+      // Control RPCs need their own connection throughout the session.
       ClientChannel(
         'localhost',
         port: port,
@@ -145,6 +147,11 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
           //   onBadCertificate: (certificate, host) => true,
           // ),
         ),
+      ),
+      controlChannel: ClientChannel(
+        '127.0.0.1',
+        port: port,
+        options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
       ),
     );
 
@@ -178,7 +185,14 @@ class CoreInterfaceDesktop extends CoreInterface with InfraLogger {
     );
     try {
       await HelloClient(channel).sayHello(HelloRequest(name: 'ProxyYou')).timeout(const Duration(seconds: 10));
-      bgClient = fgClient = ResponsiveCoreClient(channel);
+      bgClient = fgClient = ResponsiveCoreClient(
+        channel,
+        controlChannel: ClientChannel(
+          '127.0.0.1',
+          port: _windowsPort!,
+          options: const ChannelOptions(credentials: ChannelCredentials.insecure()),
+        ),
+      );
       return '';
     } catch (_) {
       await channel.shutdown();

@@ -1,7 +1,7 @@
 name: hiddify
 description: Cross Platform Multi Protocol Proxy Frontend.
 publish_to: "none"
-version: 4.1.22+40122
+version: 4.1.23+40123
 
 environment:
   sdk: ^3.13.5
@@ -121,7 +121,6 @@ dependencies:
   # Used for registering custom schemes in the Windows registry
   win32: ^5.12.0
   humanizer: ^3.0.1
-  webview_windows: 0.4.0
 
 dev_dependencies:
   url_launcher_platform_interface: ^2.3.2

@@ -60,12 +60,54 @@ class TestRepository implements ProxyRepository {
 void main() {
   test('ping belongs to the selected server rather than its balancer', () {
     final result = connectedOutbound([
-      OutboundGroup(items: [OutboundInfo(tag: 'balancer', isGroup: true, urlTestDelay: 20)]),
-      OutboundGroup(items: [OutboundInfo(tag: 'server', urlTestDelay: 89)]),
+      OutboundGroup(
+        tag: 'select',
+        selected: 'balancer',
+        items: [OutboundInfo(tag: 'balancer', isGroup: true, urlTestDelay: 20)],
+      ),
+      OutboundGroup(
+        tag: 'balancer',
+        selected: 'server',
+        items: [OutboundInfo(tag: 'server', urlTestDelay: 89)],
+      ),
     ]);
     expect(result.tag, 'server');
     expect(result.urlTestDelay, 89);
     expect(connectedOutbound([OutboundGroup()]).urlTestDelay, 0);
+  });
+
+  test('home follows the main selection and ignores unrelated balancer leaves', () {
+    final chosen = OutboundInfo(tag: 'chosen', urlTestDelay: 91);
+    expect(
+      connectedOutbound([
+        OutboundGroup(tag: 'select', selected: 'chosen', items: [chosen]),
+        OutboundGroup(
+          tag: 'lowest',
+          selected: 'other',
+          items: [OutboundInfo(tag: 'other', urlTestDelay: 25)],
+        ),
+      ]).tag,
+      'chosen',
+    );
+    expect(
+      connectedOutbound([
+        OutboundGroup(
+          tag: 'select',
+          selected: 'missing',
+          items: [OutboundInfo(tag: 'unrelated')],
+        ),
+      ]).tag,
+      isEmpty,
+    );
+    expect(
+      connectedOutbound([
+        OutboundGroup(
+          tag: 'select',
+          items: [OutboundInfo(tag: 'select', isGroup: true)],
+        ),
+      ]).tag,
+      isEmpty,
+    );
   });
 
   Future<void> render(

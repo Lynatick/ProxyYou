@@ -84,10 +84,20 @@ class CoreInterfaceMobile extends CoreInterface with InfraLogger {
         port: portFront,
         options: ChannelOptions(credentials: channelOption),
       ),
+      controlChannel: ClientChannel(
+        '127.0.0.1',
+        port: portFront,
+        options: ChannelOptions(credentials: channelOption),
+      ),
     );
 
     bgClient = ResponsiveCoreClient(
       ClientChannel(
+        '127.0.0.1',
+        port: portBack,
+        options: ChannelOptions(credentials: channelOption),
+      ),
+      controlChannel: ClientChannel(
         '127.0.0.1',
         port: portBack,
         options: ChannelOptions(credentials: channelOption),

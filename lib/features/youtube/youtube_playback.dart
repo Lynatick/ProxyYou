@@ -7,6 +7,7 @@ import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/settings/data/config_option_repository.dart';
 import 'package:hiddify/features/youtube/youtube_test_video.dart';
+import 'package:hiddify/utils/platform_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:hooks_riverpod/legacy.dart';
 
@@ -20,6 +21,8 @@ class PlaybackState {
   final String? videoId;
 }
 
+final youtubePlaybackSupportedProvider = Provider<bool>((ref) => !PlatformUtils.isWindows);
+
 final youtubePlaybackProvider = StateNotifierProvider.autoDispose<YoutubePlaybackController, PlaybackState>((ref) {
   final running = ref.watch(serviceRunningProvider);
   final enabled = ref.watch(ConfigOptions.enableMixedPort);
@@ -28,7 +31,10 @@ final youtubePlaybackProvider = StateNotifierProvider.autoDispose<YoutubePlaybac
   ref.watch(connectionNotifierProvider);
   ref.watch(activeProfileProvider.select((profile) => profile.value?.id));
   ref.watch(activeProxyNotifierProvider.select((proxy) => proxy.value?.tag));
-  return YoutubePlaybackController(port: port, enabled: running && enabled);
+  return YoutubePlaybackController(
+    port: port,
+    enabled: running && enabled && ref.watch(youtubePlaybackSupportedProvider),
+  );
 });
 
 class YoutubePlaybackController extends StateNotifier<PlaybackState> {

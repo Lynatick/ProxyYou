@@ -60,7 +60,12 @@ class ConnectedConfigurationButton extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                     ],
-                    Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
+                    Text(
+                      name.isEmpty ? 'Сервер ещё не выбран' : name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall,
+                    ),
                     if (protocol.isNotEmpty) Text(protocol, style: theme.textTheme.bodySmall),
                   ],
                 ),

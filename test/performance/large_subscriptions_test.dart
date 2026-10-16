@@ -120,6 +120,39 @@ void main() {
     expect(calls, [1]);
   });
 
+  test('off-screen pause keeps draining transport and converts only the newest snapshot on resume', () async {
+    final source = StreamController<int>();
+    final converted = <int>[];
+    final received = <int>[];
+    var drained = 0;
+    final subscription = latestAsyncMap(
+      source.stream.map((value) {
+        drained++;
+        return value;
+      }),
+      (value) async {
+        converted.add(value);
+        return value;
+      },
+    ).listen(received.add);
+    source.add(0);
+    await Future<void>.delayed(Duration.zero);
+    subscription.pause();
+    for (var value = 1; value <= 10000; value++) {
+      source.add(value);
+    }
+    await Future<void>.delayed(Duration.zero);
+    expect(source.isPaused, isFalse);
+    expect(drained, 10001);
+    expect(converted, [0]);
+    subscription.resume();
+    await Future<void>.delayed(Duration.zero);
+    expect(converted, [0, 10000]);
+    expect(received, [0, 10000]);
+    await subscription.cancel();
+    await source.close();
+  });
+
   test('conversion error does not discard newest update', () async {
     final source = StreamController<int>();
     final gate = Completer<void>();

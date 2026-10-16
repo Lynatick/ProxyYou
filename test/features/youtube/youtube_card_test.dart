@@ -10,6 +10,50 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  for (final playbackSupported in [false, true]) {
+    testWidgets('network probe stays available with playback supported=$playbackSupported', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final container = ProviderContainer(
+        overrides: [
+          sharedPreferencesProvider.overrideWith((ref) => Future.value(preferences)),
+          serviceRunningProvider.overrideWithValue(true),
+          youtubeReportProvider.overrideWith(
+            (ref) => Future.value(
+              YoutubeReport([
+                const ProbeResult(
+                  label: 'YouTube',
+                  outcome: ProbeOutcome.reachable,
+                  elapsed: Duration(milliseconds: 50),
+                ),
+              ]),
+            ),
+          ),
+          youtubePlaybackSupportedProvider.overrideWithValue(playbackSupported),
+          youtubePlaybackProvider.overrideWith((ref) {
+            if (!playbackSupported) throw StateError('Windows must not initialize a player');
+            return YoutubePlaybackController(port: 12334, enabled: false);
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(sharedPreferencesProvider.future);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(body: SingleChildScrollView(child: YoutubeCard())),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('YouTube: 50 мс'), findsOneWidget);
+      expect(find.text('Проверить воспроизведение'), playbackSupported ? findsOneWidget : findsNothing);
+      expect(find.textContaining('5 секунд'), playbackSupported ? findsOneWidget : findsNothing);
+      expect(find.textContaining('WebView2'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
   testWidgets('missing thumbnail is distinguished from a failed network check', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -23,18 +67,22 @@ void main() {
         isThumbnail: true,
       ),
     ]);
-    final container = ProviderContainer(overrides: [
-      sharedPreferencesProvider.overrideWith((ref) => Future.value(preferences)),
-      serviceRunningProvider.overrideWithValue(true),
-      youtubeReportProvider.overrideWith((ref) => Future.value(report)),
-      youtubePlaybackProvider.overrideWith((ref) => YoutubePlaybackController(port: 12334, enabled: false)),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWith((ref) => Future.value(preferences)),
+        serviceRunningProvider.overrideWithValue(true),
+        youtubeReportProvider.overrideWith((ref) => Future.value(report)),
+        youtubePlaybackProvider.overrideWith((ref) => YoutubePlaybackController(port: 12334, enabled: false)),
+      ],
+    );
     addTearDown(container.dispose);
     await container.read(sharedPreferencesProvider.future);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: SingleChildScrollView(child: YoutubeCard()))),
+        child: const MaterialApp(
+          home: Scaffold(body: SingleChildScrollView(child: YoutubeCard())),
+        ),
       ),
     );
     await tester.pumpAndSettle();

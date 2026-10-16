@@ -8,7 +8,23 @@ import 'package:hiddify/hiddifycore/generated/v2/hcore/hcore_service.pbgrpc.dart
 
 /// Keep protobuf decoding of large outbound snapshots off the UI isolate.
 class ResponsiveCoreClient extends CoreClient {
-  ResponsiveCoreClient(super.channel, {super.options, super.interceptors});
+  ResponsiveCoreClient(super.channel, {super.options, super.interceptors, ClientChannel? controlChannel})
+    : _control = controlChannel == null
+          ? null
+          : CoreClient(controlChannel, options: options, interceptors: interceptors);
+
+  final CoreClient? _control;
+
+  // A paused/large outbound stream must not hold up Start, Stop or settings on
+  // the same HTTP/2 connection. Each platform supplies a separate control lane.
+  @override
+  ResponseFuture<R> $createUnaryCall<Q, R>(ClientMethod<Q, R> method, Q request, {CallOptions? options}) =>
+      _control?.$createUnaryCall(method, request, options: options) ??
+      super.$createUnaryCall(method, request, options: options);
+
+  @override
+  ResponseStream<CoreInfoResponse> coreInfoListener(Empty request, {CallOptions? options}) =>
+      _control?.coreInfoListener(request, options: options) ?? super.coreInfoListener(request, options: options);
 
   static final _rawOutbounds = ClientMethod<Empty, Uint8List>(
     '/hcore.Core/OutboundsInfo',

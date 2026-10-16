@@ -1,6 +1,22 @@
 --- a/hiddify-sing-box/protocol/group/balancer/balancer.go
 +++ b/hiddify-sing-box/protocol/group/balancer/balancer.go
-@@ -92,14 +92,8 @@
+@@ -3,6 +3,7 @@
+ import (
+ 	"context"
+ 	"net"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"github.com/sagernet/sing-box/adapter"
+@@ -53,6 +54,7 @@
+ 	availbleOutbounds []adapter.Outbound
+ 	close             chan struct{}
+ 	interruptGroup    *interrupt.Group
++	lastSelected      atomic.Pointer[string]
+ }
+ 
+ func NewLoadBalance(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.BalancerOutboundOptions) (adapter.Outbound, error) {
+@@ -92,14 +94,8 @@
  		outbounds = append(outbounds, detour)
  	}
  	switch s.options.Strategy {
@@ -17,7 +33,7 @@
  	default:
  		return E.New("unknown load balance strategy: ", s.options.Strategy)
  	}
-@@ -120,6 +114,7 @@
+@@ -120,6 +116,7 @@
  		return
  	}
  	defer s.monitor.UnsubscribeGroup(s.Tag(), observer)
@@ -25,7 +41,29 @@
  
  	for {
  		select {
-@@ -163,22 +158,15 @@
+@@ -151,7 +148,20 @@
+ 	if s.strategyFn == nil {
+ 		return ""
+ 	}
+-	return s.strategyFn.Now()
++	if selected := s.strategyFn.Now(); selected != "" {
++		return selected
++	}
++	if selected := s.lastSelected.Load(); selected != nil {
++		return *selected
++	}
++	return ""
++}
++
++func (s *Balancer) reportSelection(tag string) {
++	previous := s.lastSelected.Swap(&tag)
++	if (previous == nil || *previous != tag) && s.monitor != nil {
++		s.monitor.SelectionChanged(s.Tag())
++	}
+ }
+ 
+ func (s *Balancer) All() []string {
+@@ -163,22 +173,16 @@
  	if metadata == nil {
  		metadata = &adapter.InboundContext{}
  	}
@@ -52,12 +90,13 @@
 +			if err != nil {
 +				return nil, err
 +			}
++			s.reportSelection(outbound.Tag())
 +			return s.interruptGroup.NewConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 +		}, func(tag string) { s.monitor.InvalidateTest(tag) })
  }
  
  func (s *Balancer) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
-@@ -186,47 +174,25 @@
+@@ -186,47 +190,26 @@
  	if metadata == nil {
  		metadata = &adapter.InboundContext{}
  	}
@@ -83,6 +122,7 @@
 +			if err != nil {
 +				return nil, err
 +			}
++			s.reportSelection(outbound.Tag())
 +			return s.interruptGroup.NewPacketConn(conn, interrupt.IsExternalConnectionFromContext(ctx)), nil
 +		}, func(tag string) { s.monitor.InvalidateTest(tag) })
  }
@@ -116,6 +156,18 @@
  }
  
  func (s *Balancer) NewDirectRouteConnection(metadata adapter.InboundContext, routeContext tun.DirectRouteContext, timeout time.Duration) (tun.DirectRouteDestination, error) {
+@@ -235,5 +218,9 @@
+ 		return nil, E.New(metadata.Network, " is not supported by outbound: ")
+ 	}
+ 	metadata.SetRealOutbound(selected.Tag())
+-	return selected.(adapter.DirectRouteOutbound).NewDirectRouteConnection(metadata, routeContext, timeout)
+-}
++	connection, err := selected.(adapter.DirectRouteOutbound).NewDirectRouteConnection(metadata, routeContext, timeout)
++	if err == nil {
++		s.reportSelection(selected.Tag())
++	}
++	return connection, err
++}
 --- a/hiddify-sing-box/protocol/group/balancer/lowest_delay.go
 +++ b/hiddify-sing-box/protocol/group/balancer/lowest_delay.go
 @@ -4,6 +4,7 @@
@@ -578,7 +630,7 @@
  				if err := monitor.TestNow("automatic"); err != nil {
  					t.Fatal(err)
  				}
-@@ -331,8 +340,13 @@
+@@ -331,14 +340,44 @@
  					t.Fatal("manual selection failed")
  				}
  				if cut {
@@ -594,6 +646,37 @@
  					}
  				} else {
  					if err := exchangeTCP(newTCP); err != nil {
+ 						t.Fatalf("selector interrupted healthy old TCP: %v", err)
+ 					}
+ 				}
++				for _, selection := range []string{"automatic", "a", "automatic", "b", "automatic"} {
++					if !out.(*group.Selector).SelectOutbound(selection) {
++						t.Fatal("round-trip selection failed: ", selection)
++					}
++					connection, actual, err := dial()
++					if connection != nil {
++						connection.Close()
++					}
++					want := selection
++					if selection == "automatic" {
++						want = "b"
++						automatic, _ := instance.Outbound().Outbound("automatic")
++						if automatic.(adapter.OutboundGroup).Now() != actual {
++							t.Fatalf("reported server differs from actual traffic: %s", actual)
++						}
++					}
++					if err != nil || actual != want {
++						t.Fatalf("round-trip %s: actual=%s want=%s error=%v", selection, actual, want, err)
++					}
++					if !cut {
++						if err := exchangeTCP(newTCP); err != nil {
++							t.Fatalf("round-trip interrupted an established connection: %v", err)
++						}
++					}
++				}
+ 			})
+ 		}
+ 	}
 --- /dev/null
 +++ b/hiddify-sing-box/protocol/group/balancer/healthy_strategy.go
 @@ -0,0 +1,201 @@
@@ -1270,4 +1353,50 @@
 +			}
 +		})
 +	}
++}
+--- /dev/null
++++ b/hiddify-sing-box/common/monitoring/selection_event.go
+@@ -0,0 +1,6 @@
++package monitoring
++
++// SelectionChanged refreshes the active route without launching another test.
++func (m *OutboundMonitoring) SelectionChanged(groupTag string) {
++	m.emitGroupEvent([]string{"", groupTag})
++}
+--- /dev/null
++++ b/hiddify-sing-box/protocol/group/balancer/selection_test.go
+@@ -0,0 +1,34 @@
++package balancer
++
++import (
++	"fmt"
++	"sync"
++	"testing"
++)
++
++func TestProxyYouBalanceReportsLastSuccessfulSelection(t *testing.T) {
++	balancer := &Balancer{strategyFn: pool(StrategyRoundRobin, "a", "b")}
++	if balancer.Now() != "" {
++		t.Fatal("a cold balancer must not invent a selected server")
++	}
++	balancer.reportSelection("a")
++	if balancer.Now() != "a" {
++		t.Fatal("last successful server not reported")
++	}
++	balancer.reportSelection("b")
++	if balancer.Now() != "b" {
++		t.Fatal("server did not change with the last successful selection")
++	}
++	var workers sync.WaitGroup
++	for i := 0; i < 20; i++ {
++		workers.Add(1)
++		go func(i int) {
++			defer workers.Done()
++			for n := 0; n < 100; n++ {
++				balancer.reportSelection(fmt.Sprint(i))
++				_ = balancer.Now()
++			}
++		}(i)
++	}
++	workers.Wait()
 +}

@@ -10,17 +10,25 @@ Stream<R> latestAsyncMap<T, R>(Stream<T> source, Future<R> Function(T) convert, 
   bool running = false;
   bool ended = false;
   bool cancelled = false;
+  bool paused = false;
 
   Future<void> drain() async {
-    if (running || cancelled) return;
+    if (running || cancelled || paused) return;
     running = true;
-    while (hasPending && !cancelled) {
+    while (hasPending && !cancelled && !paused) {
       final value = pending as T;
       pending = null;
       hasPending = false;
       try {
         final result = await convert(value);
-        if (!cancelled) controller.add(result);
+        if (!cancelled) {
+          if (!paused) {
+            controller.add(result);
+          } else if (!hasPending) {
+            pending = value;
+            hasPending = true;
+          }
+        }
       } catch (error, stack) {
         if (!cancelled) controller.addError(error, stack);
       }
@@ -29,7 +37,7 @@ Stream<R> latestAsyncMap<T, R>(Stream<T> source, Future<R> Function(T) convert, 
       }
     }
     running = false;
-    if (ended && !cancelled) await controller.close();
+    if (ended && !hasPending && !cancelled) await controller.close();
   }
 
   controller = StreamController<R>(
@@ -43,12 +51,18 @@ Stream<R> latestAsyncMap<T, R>(Stream<T> source, Future<R> Function(T) convert, 
         onError: controller.addError,
         onDone: () {
           ended = true;
-          if (!running) unawaited(controller.close());
+          if (!running && !hasPending) unawaited(controller.close());
         },
       );
     },
-    onPause: () => subscription?.pause(),
-    onResume: () => subscription?.resume(),
+    // Riverpod pauses off-screen providers. Keep draining the native stream:
+    // pausing a gRPC response can exhaust its HTTP/2 connection window and
+    // block unrelated requests. Retain just one raw snapshot while hidden.
+    onPause: () => paused = true,
+    onResume: () {
+      paused = false;
+      unawaited(drain());
+    },
     onCancel: () async {
       cancelled = true;
       pending = null;
